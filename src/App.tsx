@@ -241,18 +241,22 @@ export default function App() {
       lotMoorea, lotFournisseur, temperature, notes,
       conformite, decision: decisionFinale, pourcentage, nbColisTotal,
       nbColisRefuses: nbColisRefuses !== null ? nbColisRefuses : null,
-      photos, poidsStatut, poidsEcart, etiquetteAbsente, etiquette,
+      nbPhotos: photos.length, // on stocke juste le nombre, pas les base64
+      poidsStatut, poidsEcart, etiquetteAbsente, etiquette,
       observations, score, date, heure,
       timestamp: Date.now(),
       id: Date.now().toString(),
     };
 
+    // rapport complet avec photos pour le PDF et l'email (en mémoire seulement)
+    const rapportAvecPhotos = { ...rapport, photos };
+
     setSendingId("new");
     try {
       const rapportsRef = ref(db, "rapports");
-      await push(rapportsRef, rapport);
+      await push(rapportsRef, rapport); // Firebase sans photos
       showToast("⏳ Envoi de l'email en cours…");
-      await envoyerEmail(rapport);
+      await envoyerEmail(rapportAvecPhotos); // email avec photos pour le PDF
       reset();
       setVue("historique");
     } catch {
@@ -486,15 +490,12 @@ export default function App() {
           <div style="font-size:32px;font-weight:900;color:${dColor};">${r.nbColisRefuses} <span style="font-size:16px;font-weight:400;color:#9ca3af;">/ ${r.nbColisTotal} (${r.pourcentage}%)</span></div>
         </div>` : "";
 
-    const photosHTML = r.photos && r.photos.filter((p: any) => p.url).length > 0
-      ? `<table width="100%" cellpadding="4" cellspacing="0" style="padding:0 20px 16px;">
-          <tr>${r.photos.filter((p: any) => p.url).slice(0, 3).map((p: any) =>
-            `<td style="width:33%"><img src="${p.url}" style="width:100%;border-radius:10px;aspect-ratio:1;object-fit:cover;display:block;" /></td>`
-          ).join("")}</tr>
-          ${r.photos.filter((p: any) => p.url).length > 3 ? `<tr>${r.photos.filter((p: any) => p.url).slice(3, 6).map((p: any) =>
-            `<td style="width:33%"><img src="${p.url}" style="width:100%;border-radius:10px;aspect-ratio:1;object-fit:cover;display:block;" /></td>`
-          ).join("")}</tr>` : ""}
-        </table>` : "";
+    const photosHTML = (r.photos?.filter((p: any) => p.url).length > 0 || r.nbPhotos > 0)
+      ? `<div style="padding:14px 28px;">
+          <div style="background:#f8f6f2;border-radius:10px;padding:12px 16px;border:1px solid #e8e0d0;font-size:13px;color:#6b7280;text-align:center;">
+            📷 ${r.photos?.filter((p: any) => p.url).length || r.nbPhotos} photo${(r.photos?.filter((p: any) => p.url).length || r.nbPhotos) > 1 ? "s" : ""} — disponibles dans le PDF
+          </div>
+        </div>` : "";
 
     return `<!DOCTYPE html>
 <html>
@@ -631,7 +632,7 @@ export default function App() {
       const response = await fetch("https://api.resend.com/emails", {
         method: "POST",
         headers: {
-          "Authorization": `Bearer re_Rgn9PcgZ_AMcZjZh9dck6b914YcaTpUDC`,
+          "Authorization": "Bearer re_Rgn9PcgZ_AMcZjZh9dck6b914YcaTpUDC",
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
@@ -642,11 +643,8 @@ export default function App() {
         }),
       });
 
-      if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.message || "Erreur Resend");
-      }
-
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || "Erreur Resend");
       showToast("✉ Email envoyé avec succès");
     } catch (err: any) {
       console.error(err);
