@@ -814,11 +814,11 @@ export default function App() {
             <div style={{ marginBottom: 16, background: "#fff", border: "1.5px solid #e8e0d0", borderRadius: 20, padding: "20px 24px" }}>
               <div className="section-title">📦 Colis</div>
               <div className="grid-2">
-                <F label="Nombre de colis reçus" required>
-                  <input type="number" value={nbColisRecu} onChange={e => setNbColisRecu(e.target.value)} placeholder="Ex: 48" min="0" />
-                </F>
                 <F label="Nombre de colis attendus">
                   <input type="number" value={nbColisAttendu} onChange={e => setNbColisAttendu(e.target.value)} placeholder="Ex: 50" min="0" />
+                </F>
+                <F label="Nombre de colis reçus" required>
+                  <input type="number" value={nbColisRecu} onChange={e => setNbColisRecu(e.target.value)} placeholder="Ex: 48" min="0" />
                 </F>
               </div>
               {nbColisRecu && nbColisAttendu && parseInt(nbColisRecu) !== parseInt(nbColisAttendu) && (
