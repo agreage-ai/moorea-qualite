@@ -148,6 +148,7 @@ export default function App() {
   const [vue, setVue] = useState("form");
   const [toast, setToast] = useState<{ msg: string; type: string } | null>(null);
   const [fournisseur, setFournisseur] = useState("");
+  const [agreeur, setAgreeur] = useState("");
   const [produit, setProduit] = useState("");
   const [conditionnement, setConditionnement] = useState("");
   const [poids, setPoids] = useState("");
@@ -156,6 +157,7 @@ export default function App() {
   const [lotFournisseur, setLotFournisseur] = useState("");
   const [temperature, setTemperature] = useState("");
   const [notes, setNotes] = useState(initialNotes);
+  const [conformite, setConformite] = useState(""); // "conforme" | "non_conforme"
   const [decision, setDecision] = useState("");
   const [pourcentage, setPourcentage] = useState("");
   const [nbColisTotal, setNbColisTotal] = useState("");
@@ -195,9 +197,9 @@ export default function App() {
   };
 
   const reset = () => {
-    setFournisseur(""); setProduit(""); setConditionnement(""); setPoids("");
+    setFournisseur(""); setAgreeur(""); setProduit(""); setConditionnement(""); setPoids("");
     setOrigine(""); setLotMoorea(""); setLotFournisseur(""); setTemperature("");
-    setNotes(initialNotes); setDecision(""); setPourcentage(""); setNbColisTotal("");
+    setNotes(initialNotes); setConformite(""); setDecision(""); setPourcentage(""); setNbColisTotal("");
     setPhotos([]); setPoidsStatut(""); setPoidsEcart("");
     setEtiquetteAbsente(false); setEtiquette(initialEtiquette); setObservations("");
   };
@@ -221,15 +223,20 @@ export default function App() {
 
   // ─── SOUMETTRE ───
   const soumettre = async () => {
-    if (!fournisseur || !produit || !decision) {
-      showToast("⚠ Fournisseur, produit et décision sont requis", "error");
+    if (!fournisseur || !produit || !conformite) {
+      showToast("⚠ Fournisseur, produit et conformité sont requis", "error");
+      return;
+    }
+    if (conformite === "non_conforme" && !decision) {
+      showToast("⚠ Précisez Réserve ou Refus", "error");
       return;
     }
     const { date, heure } = now();
+    const decisionFinale = conformite === "conforme" ? "stock" : decision;
     const rapport = {
-      fournisseur, produit, conditionnement, poids, origine,
+      fournisseur, agreeur, produit, conditionnement, poids, origine,
       lotMoorea, lotFournisseur, temperature, notes,
-      decision, pourcentage, nbColisTotal,
+      conformite, decision: decisionFinale, pourcentage, nbColisTotal,
       nbColisRefuses: nbColisRefuses !== null ? nbColisRefuses : null,
       photos, poidsStatut, poidsEcart, etiquetteAbsente, etiquette,
       observations, score, date, heure,
@@ -790,6 +797,16 @@ export default function App() {
         {/* FORMULAIRE */}
         {vue === "form" && (
           <div className="fade-up">
+
+            {/* AGREEUR */}
+            <div style={{ marginBottom: 16, background: "#0a0a0a", border: "2px solid #c8a84b", borderRadius: 20, padding: "16px 24px", display: "flex", alignItems: "center", gap: 16 }}>
+              <div style={{ width: 40, height: 40, borderRadius: 10, background: "#c8a84b22", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0 }}>👤</div>
+              <div style={{ flex: 1 }}>
+                <label style={{ fontSize: 12, color: "#c8a84b", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.8px", display: "block", marginBottom: 6 }}>Nom de l'agréeur</label>
+                <input value={agreeur} onChange={e => setAgreeur(e.target.value)} placeholder="Votre nom" style={{ border: "1.5px solid #c8a84b44", background: "#1a1a1a", color: "#fff" }} />
+              </div>
+            </div>
+
             <div className="card" style={{ padding: "24px", marginBottom: 16 }}>
               <div className="section-title">📦 Informations du colis</div>
               <F label="Fournisseur" required><input value={fournisseur} onChange={e => setFournisseur(e.target.value)} placeholder="Nom du fournisseur" /></F>
@@ -927,49 +944,81 @@ export default function App() {
             </div>
 
             <div className="card" style={{ padding: "24px", marginBottom: 16 }}>
-              <div className="section-title">Observations & Décision</div>
-              <F label="Observations">
+              <div className="section-title">📋 Commentaire & Conformité</div>
+              
+              <F label="Commentaire">
                 <textarea value={observations} onChange={e => setObservations(e.target.value)} placeholder="Remarques sur la qualité, état du lot, anomalies constatées…" rows={3} style={{ resize: "vertical" }} />
               </F>
-              <p style={{ fontSize: 12, color: "#6b7280", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 12 }}>Décision finale</p>
-              <div className="decision-row">
-                {[
-                  { id: "stock", label: "✓ Entrée en stock", bg: "linear-gradient(135deg, #16a34a, #15803d)", bgOff: "#f0fdf4", colorOff: "#16a34a", border: "#bbf7d0", shadow: "rgba(22,163,74,0.35)" },
-                  { id: "reserve", label: "⚠ Réserve", bg: "linear-gradient(135deg, #d97706, #b45309)", bgOff: "#fffbeb", colorOff: "#d97706", border: "#fcd34d", shadow: "rgba(217,119,6,0.35)" },
-                  { id: "refus", label: "✗ Refus", bg: "linear-gradient(135deg, #dc2626, #b91c1c)", bgOff: "#fef2f2", colorOff: "#dc2626", border: "#fca5a5", shadow: "rgba(220,38,38,0.3)" },
-                ].map(d => (
-                  <button key={d.id} onClick={() => { setDecision(d.id); setPourcentage(""); }} style={{
-                    flex: 1, padding: "16px 6px", borderRadius: 12, cursor: "pointer",
-                    fontFamily: "'Syne', sans-serif", fontWeight: decision === d.id ? 700 : 600, fontSize: 15,
-                    background: decision === d.id ? d.bg : d.bgOff,
-                    color: decision === d.id ? "#fff" : d.colorOff,
-                    border: `2px solid ${decision === d.id ? "transparent" : d.border}`,
-                    boxShadow: decision === d.id ? `0 4px 14px ${d.shadow}` : "none",
-                    transform: decision === d.id ? "translateY(-1px)" : "none",
-                    transition: "all 0.2s", touchAction: "manipulation",
-                  }}>{d.label}</button>
-                ))}
+
+              {/* CONFORMITE */}
+              <p style={{ fontSize: 12, color: "#6b7280", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 12 }}>Conformité</p>
+              <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
+                <button onClick={() => { setConformite("conforme"); setDecision(""); setPourcentage(""); }} style={{
+                  flex: 1, padding: "18px 8px", borderRadius: 14, cursor: "pointer",
+                  fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 16,
+                  background: conformite === "conforme" ? "linear-gradient(135deg, #16a34a, #15803d)" : "#f0fdf4",
+                  color: conformite === "conforme" ? "#fff" : "#16a34a",
+                  border: `2px solid ${conformite === "conforme" ? "transparent" : "#bbf7d0"}`,
+                  boxShadow: conformite === "conforme" ? "0 4px 16px rgba(22,163,74,0.4)" : "none",
+                  transition: "all 0.2s", touchAction: "manipulation",
+                }}>✅ Conforme</button>
+                <button onClick={() => { setConformite("non_conforme"); setDecision(""); setPourcentage(""); }} style={{
+                  flex: 1, padding: "18px 8px", borderRadius: 14, cursor: "pointer",
+                  fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 16,
+                  background: conformite === "non_conforme" ? "linear-gradient(135deg, #dc2626, #b91c1c)" : "#fef2f2",
+                  color: conformite === "non_conforme" ? "#fff" : "#dc2626",
+                  border: `2px solid ${conformite === "non_conforme" ? "transparent" : "#fca5a5"}`,
+                  boxShadow: conformite === "non_conforme" ? "0 4px 16px rgba(220,38,38,0.35)" : "none",
+                  transition: "all 0.2s", touchAction: "manipulation",
+                }}>❌ Non conforme</button>
               </div>
 
-              {(decision === "reserve" || decision === "refus") && (
-                <div style={{ background: decision === "reserve" ? "#fffbeb" : "#fef2f2", border: `1.5px solid ${decision === "reserve" ? "#fcd34d" : "#fca5a5"}`, borderRadius: 14, padding: "16px 18px" }}>
-                  <p style={{ fontSize: 12, fontWeight: 600, color: decision === "reserve" ? "#92400e" : "#991b1b", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 12 }}>
-                    {decision === "reserve" ? "⚠ Détail de la réserve" : "✗ Détail du refus"}
-                  </p>
-                  <div className="grid-2">
-                    <F label="Nombre de colis total">
-                      <input type="number" value={nbColisTotal} onChange={e => setNbColisTotal(e.target.value)} placeholder="Ex: 50" min="0" style={{ border: `1.5px solid ${decision === "reserve" ? "#fcd34d" : "#fca5a5"}` }} />
-                    </F>
-                    <F label={`% ${decision === "reserve" ? "en réserve" : "refusé"}`}>
-                      <input type="number" value={pourcentage} onChange={e => setPourcentage(e.target.value)} placeholder="Ex: 20" min="0" max="100" style={{ border: `1.5px solid ${decision === "reserve" ? "#fcd34d" : "#fca5a5"}` }} />
-                    </F>
+              {/* SI NON CONFORME → Réserve ou Refus */}
+              {conformite === "non_conforme" && (
+                <div style={{ background: "#fef2f2", border: "1.5px solid #fca5a5", borderRadius: 14, padding: "16px 18px", marginBottom: 16 }}>
+                  <p style={{ fontSize: 12, fontWeight: 700, color: "#991b1b", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 12 }}>Type de non-conformité</p>
+                  <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
+                    <button onClick={() => { setDecision("reserve"); setPourcentage(""); }} style={{
+                      flex: 1, padding: "14px 8px", borderRadius: 12, cursor: "pointer",
+                      fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 15,
+                      background: decision === "reserve" ? "linear-gradient(135deg, #d97706, #b45309)" : "#fffbeb",
+                      color: decision === "reserve" ? "#fff" : "#d97706",
+                      border: `2px solid ${decision === "reserve" ? "transparent" : "#fcd34d"}`,
+                      boxShadow: decision === "reserve" ? "0 4px 14px rgba(217,119,6,0.35)" : "none",
+                      transition: "all 0.2s", touchAction: "manipulation",
+                    }}>🟠 Réserve</button>
+                    <button onClick={() => { setDecision("refus"); setPourcentage(""); }} style={{
+                      flex: 1, padding: "14px 8px", borderRadius: 12, cursor: "pointer",
+                      fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 15,
+                      background: decision === "refus" ? "linear-gradient(135deg, #dc2626, #b91c1c)" : "#fef2f2",
+                      color: decision === "refus" ? "#fff" : "#dc2626",
+                      border: `2px solid ${decision === "refus" ? "transparent" : "#fca5a5"}`,
+                      boxShadow: decision === "refus" ? "0 4px 14px rgba(220,38,38,0.3)" : "none",
+                      transition: "all 0.2s", touchAction: "manipulation",
+                    }}>🔴 Refus</button>
                   </div>
-                  {nbColisRefuses !== null && (
-                    <div style={{ background: "#fff", borderRadius: 10, padding: "12px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", border: `1px solid ${decision === "reserve" ? "#fcd34d" : "#fca5a5"}` }}>
-                      <span style={{ fontSize: 13, color: "#6b7280" }}>Colis {decision === "reserve" ? "en réserve" : "refusés"}</span>
-                      <span style={{ fontSize: 22, fontWeight: 800, color: decision === "reserve" ? "#d97706" : "#dc2626", fontFamily: "'Syne', sans-serif" }}>
-                        {nbColisRefuses} <span style={{ fontSize: 13, fontWeight: 400 }}>/ {nbColisTotal}</span>
-                      </span>
+
+                  {(decision === "reserve" || decision === "refus") && (
+                    <div>
+                      <p style={{ fontSize: 11, fontWeight: 600, color: decision === "reserve" ? "#92400e" : "#991b1b", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 10 }}>
+                        {decision === "reserve" ? "Détail de la réserve" : "Détail du refus"}
+                      </p>
+                      <div className="grid-2">
+                        <F label="Nombre de colis total">
+                          <input type="number" value={nbColisTotal} onChange={e => setNbColisTotal(e.target.value)} placeholder="Ex: 50" min="0" style={{ border: `1.5px solid ${decision === "reserve" ? "#fcd34d" : "#fca5a5"}` }} />
+                        </F>
+                        <F label={`% ${decision === "reserve" ? "en réserve" : "refusé"}`}>
+                          <input type="number" value={pourcentage} onChange={e => setPourcentage(e.target.value)} placeholder="Ex: 20" min="0" max="100" style={{ border: `1.5px solid ${decision === "reserve" ? "#fcd34d" : "#fca5a5"}` }} />
+                        </F>
+                      </div>
+                      {nbColisRefuses !== null && (
+                        <div style={{ background: "#fff", borderRadius: 10, padding: "12px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", border: `1px solid ${decision === "reserve" ? "#fcd34d" : "#fca5a5"}` }}>
+                          <span style={{ fontSize: 13, color: "#6b7280" }}>Colis {decision === "reserve" ? "en réserve" : "refusés"}</span>
+                          <span style={{ fontSize: 22, fontWeight: 800, color: decision === "reserve" ? "#d97706" : "#dc2626", fontFamily: "'Syne', sans-serif" }}>
+                            {nbColisRefuses} <span style={{ fontSize: 13, fontWeight: 400 }}>/ {nbColisTotal}</span>
+                          </span>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
