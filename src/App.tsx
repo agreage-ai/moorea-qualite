@@ -849,7 +849,7 @@ ${r.observations ? `💬 ${r.observations}` : ""}
     row("Fournisseur", r.fournisseur, true); row("Produit", r.produit, true);
     if (r.agreeur) row("Agreeur", r.agreeur);
     row("Origine", r.origine);
-    if (r.poids) row("Poids", r.poids);
+    if (r.poids) row("Poids", r.poids + " kg");
     if (r.conditionnement) row("Conditionnement", r.conditionnement);
     if (r.lotMoorea) row("N Lot Moorea", r.lotMoorea);
     if (r.lotFournisseur) row("N Lot Fournisseur", r.lotFournisseur);
@@ -866,16 +866,37 @@ ${r.observations ? `💬 ${r.observations}` : ""}
     doc.setTextColor(255,255,255); doc.setFont("helvetica","bold"); doc.setFontSize(9);
     doc.text(conf, M+6, y+4.5); y+=12;
 
-    section("QUALITE VISUELLE");
+    section("EVALUATION QUALITE");
     const noteLabels: Record<number,string> = {1:"Insuffisant",2:"Passable",3:"Correct",4:"Bon",5:"Excellent"};
     const noteColors2: Record<number,[number,number,number]> = {1:[239,68,68],2:[249,115,22],3:[234,179,8],4:[34,197,94],5:[21,128,61]};
-    const q = r.notes?.qualite;
-    if (q > 0) {
-      const nc = noteColors2[q];
-      doc.setFillColor(...nc);
-      doc.roundedRect(M+2,y-2,60,9,2,2,"F");
+    const criteresLabels: Record<string,string> = { qualite: "Qualite visuelle", couleur: "Couleur", emballage: "Etat emballage" };
+    const cols3 = 3; const cw3 = CW / cols3;
+    let hasCritere = false;
+    Object.entries(criteresLabels).forEach(([key, label], idx) => {
+      const val = r.notes?.[key];
+      if (val > 0) {
+        hasCritere = true;
+        const col = idx % cols3;
+        const ix = M + col * cw3;
+        const nc = noteColors2[val];
+        doc.setFillColor(...nc);
+        doc.roundedRect(ix, y-1, cw3-2, 12, 2, 2, "F");
+        doc.setTextColor(255,255,255); doc.setFont("helvetica","bold"); doc.setFontSize(7.5);
+        doc.text(label, ix+3, y+4);
+        doc.setFontSize(9);
+        doc.text(`${val}/5 - ${noteLabels[val]}`, ix+3, y+9);
+      }
+    });
+    if (hasCritere) y += 16;
+    if (r.score) {
+      const scoreNum = parseFloat(r.score);
+      const scoreColor2: [number,number,number] = scoreNum >= 4 ? [22,163,74] : scoreNum >= 3 ? [217,119,6] : [220,38,38];
+      const suggestion = scoreNum >= 4 ? "Conforme" : scoreNum >= 3 ? "Reserve" : "Non conforme";
+      doc.setFillColor(...scoreColor2);
+      doc.roundedRect(M+2, y-2, 90, 9, 2, 2, "F");
       doc.setTextColor(255,255,255); doc.setFont("helvetica","bold"); doc.setFontSize(9);
-      doc.text(`${q}/5 - ${noteLabels[q]}`,M+6,y+4.5); y+=12;
+      doc.text(`Score moyen : ${r.score}/5 - Suggestion : ${suggestion}`, M+6, y+4.5);
+      y += 14;
     }
 
     section("POIDS");
@@ -992,23 +1013,47 @@ ${r.observations ? `💬 ${r.observations}` : ""}
 
     section("INFORMATIONS DU COLIS");
     row("Fournisseur", r.fournisseur, true); row("Produit", r.produit, true);
-    row("Origine", r.origine); if (r.poids) row("Poids", r.poids);
+    if (r.agreeur) row("Agreeur", r.agreeur);
+    row("Origine", r.origine); if (r.poids) row("Poids", r.poids + " kg");
     if (r.conditionnement) row("Conditionnement", r.conditionnement);
     if (r.lotMoorea) row("N° Lot Moorea", r.lotMoorea);
     if (r.lotFournisseur) row("N° Lot Fournisseur", r.lotFournisseur);
     if (r.temperature) row("Temperature reception", r.temperature + " °C");
+    if (r.nbColisAttendu) row("Colis attendus", r.nbColisAttendu);
+    if (r.nbColisRecu) row("Colis recus", r.nbColisRecu);
     y += 4;
 
-    section("QUALITE VISUELLE");
+    section("EVALUATION QUALITE");
     const noteLabels2: Record<number,string> = { 1:"Insuffisant",2:"Passable",3:"Correct",4:"Bon",5:"Excellent" };
     const noteColors2: Record<number,[number,number,number]> = { 1:[239,68,68],2:[249,115,22],3:[234,179,8],4:[34,197,94],5:[21,128,61] };
-    const q = r.notes?.qualite;
-    if (q > 0) {
-      const nc = noteColors2[q];
-      doc.setFillColor(nc[0], nc[1], nc[2]);
-      doc.roundedRect(M+2,y-2,60,9,2,2,"F");
+    const criteresLabels2: Record<string,string> = { qualite: "Qualite visuelle", couleur: "Couleur", emballage: "Etat emballage" };
+    const cols3b = 3; const cw3b = CW / cols3b;
+    let hasCritere2 = false;
+    Object.entries(criteresLabels2).forEach(([key, label], idx) => {
+      const val = r.notes?.[key];
+      if (val > 0) {
+        hasCritere2 = true;
+        const col = idx % cols3b;
+        const ix = M + col * cw3b;
+        const nc = noteColors2[val];
+        doc.setFillColor(...nc);
+        doc.roundedRect(ix, y-1, cw3b-2, 12, 2, 2, "F");
+        doc.setTextColor(255,255,255); doc.setFont("helvetica","bold"); doc.setFontSize(7.5);
+        doc.text(label, ix+3, y+4);
+        doc.setFontSize(9);
+        doc.text(`${val}/5 - ${noteLabels2[val]}`, ix+3, y+9);
+      }
+    });
+    if (hasCritere2) y += 16;
+    if (r.score) {
+      const scoreNum = parseFloat(r.score);
+      const scoreColor3: [number,number,number] = scoreNum >= 4 ? [22,163,74] : scoreNum >= 3 ? [217,119,6] : [220,38,38];
+      const suggestion2 = scoreNum >= 4 ? "Conforme" : scoreNum >= 3 ? "Reserve" : "Non conforme";
+      doc.setFillColor(...scoreColor3);
+      doc.roundedRect(M+2, y-2, 100, 9, 2, 2, "F");
       doc.setTextColor(255,255,255); doc.setFont("helvetica","bold"); doc.setFontSize(9);
-      doc.text(`${q}/5 — ${noteLabels2[q]}`,M+6,y+4.5); y+=12;
+      doc.text(`Score moyen : ${r.score}/5 - Suggestion : ${suggestion2}`, M+6, y+4.5);
+      y += 14;
     }
 
     section("POIDS");
