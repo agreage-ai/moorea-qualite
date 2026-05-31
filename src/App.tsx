@@ -488,11 +488,17 @@ export default function App() {
           <div style="font-size:32px;font-weight:900;color:${dColor};">${r.nbColisRefuses} <span style="font-size:16px;font-weight:400;color:#9ca3af;">/ ${r.nbColisTotal} (${r.pourcentage}%)</span></div>
         </div>` : "";
 
-    const photosHTML = (r.photos?.filter((p: any) => p.url).length > 0 || r.nbPhotos > 0)
-      ? `<div style="padding:14px 28px;">
-          <div style="background:#f8f6f2;border-radius:10px;padding:12px 16px;border:1px solid #e8e0d0;font-size:13px;color:#6b7280;text-align:center;">
-            📷 ${r.photos?.filter((p: any) => p.url).length || r.nbPhotos} photo${(r.photos?.filter((p: any) => p.url).length || r.nbPhotos) > 1 ? "s" : ""} — disponibles dans le PDF
-          </div>
+    const photosHTML = r.photos?.filter((p: any) => p.url).length > 0
+      ? `<div style="padding:8px 28px 16px;">
+          <div style="font-size:11px;color:#8a6f2e;font-weight:700;text-transform:uppercase;letter-spacing:1px;padding:10px 0 8px;border-top:1px solid #f0ede6;">📷 Photos</div>
+          <table width="100%" cellpadding="4" cellspacing="0">
+            <tr>${r.photos.filter((p: any) => p.url).slice(0, 3).map((p: any) =>
+              `<td style="width:33%;vertical-align:top;"><img src="${p.url}" style="width:100%;border-radius:8px;display:block;" /></td>`
+            ).join("")}</tr>
+            ${r.photos.filter((p: any) => p.url).length > 3 ? `<tr>${r.photos.filter((p: any) => p.url).slice(3, 6).map((p: any) =>
+              `<td style="width:33%;vertical-align:top;"><img src="${p.url}" style="width:100%;border-radius:8px;display:block;" /></td>`
+            ).join("")}</tr>` : ""}
+          </table>
         </div>` : "";
 
     return `<!DOCTYPE html>
