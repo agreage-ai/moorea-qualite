@@ -232,7 +232,7 @@ export default function App() {
     const dLabel = r.decision === "stock" ? "✅ CONFORME — Entrée en stock" : r.decision === "reserve" ? "⚠️ NON CONFORME — Réserve" : "❌ NON CONFORME — Refus";
     const scoreNum = r.score ? parseFloat(r.score) : null;
     const suggestion = scoreNum ? (scoreNum >= 4 ? "✅ Conforme" : scoreNum >= 3 ? "⚠️ Réserve" : "❌ Non conforme") : "";
-    const msg = `🍃 *RAPPORT AGRÉAGE MOOREA*
+    const msg = `🍃 *RAPPORT AGRÉAGE MOOREA*${r.numeroRapport ? ` — ${r.numeroRapport}` : ""}
 ━━━━━━━━━━━━━━━━━
 📅 ${r.date} à ${r.heure}${r.agreeur ? ` · 👤 ${r.agreeur}` : ""}
 📦 *${r.produit}*
@@ -314,7 +314,17 @@ _PDF joint_`;
     try {
       const { date, heure } = now();
       const decisionFinale = conformite === "conforme" ? "stock" : decision;
-      const numeroRapport = `MQ-${Date.now().toString().slice(-6)}`;
+
+      // Numéro de rapport : S{semaine}-{année}-{séquence}
+      const now2 = new Date();
+      const startOfYear = new Date(now2.getFullYear(), 0, 1);
+      const weekNum = Math.ceil(((now2.getTime() - startOfYear.getTime()) / 86400000 + startOfYear.getDay() + 1) / 7);
+      const weekStr = weekNum.toString().padStart(2, "0");
+      const yearStr = now2.getFullYear().toString();
+      // Séquence basée sur les rapports existants de cette semaine
+      const sameWeekCount = rapports.filter(r => r.numeroRapport?.startsWith(`S${weekStr}-${yearStr}`)).length + 1;
+      const seqStr = sameWeekCount.toString().padStart(3, "0");
+      const numeroRapport = `S${weekStr}-${yearStr}-${seqStr}`;
 
       const rapport = {
         numeroRapport,
@@ -794,7 +804,7 @@ _PDF joint_`;
     setSendingId(r.id || r.firebaseKey || "new");
     try {
       const htmlContent = buildEmailHTML(r);
-      const subject = `Rapport Agréage Moorea - ${r.produit} | ${r.fournisseur} | Lot ${r.lotMoorea || "-"} | ${r.date}`;
+      const subject = `${r.numeroRapport ? "[" + r.numeroRapport + "] " : ""}Rapport Agréage Moorea - ${r.produit} | ${r.fournisseur} | ${r.date}`;
 
       // Générer le PDF en base64
       const pdfDataUri = await generatePDFBase64(r);
@@ -844,6 +854,10 @@ _PDF joint_`;
     doc.text("Rapport Qualite - Arrivages", M + 32, 14);
     doc.setTextColor(150, 150, 150); doc.setFontSize(8);
     doc.text(`${r.date} a ${r.heure}`, W - M, 14, { align: "right" });
+    if (r.numeroRapport) {
+      doc.setTextColor(200, 168, 75); doc.setFont("helvetica", "bold"); doc.setFontSize(8);
+      doc.text(r.numeroRapport, W - M, 9, { align: "right" });
+    }
     y = 32;
 
     const dc = decisionColor(r.decision);
