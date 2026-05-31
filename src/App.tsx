@@ -217,9 +217,37 @@ export default function App() {
       await remove(rapportRef);
       setConfirmDelete(null);
       showToast("🗑 Rapport supprimé");
-    } catch {
+      // Force update local state immediately
+      setRapports(prev => prev.filter(r => r.firebaseKey !== firebaseKey));
+    } catch (err) {
+      console.error(err);
       showToast("Erreur lors de la suppression", "error");
     }
+  };
+
+  const partagerWhatsApp = async (r: any) => {
+    const dLabel = r.decision === "stock" ? "✅ Entrée en stock" : r.decision === "reserve" ? "⚠️ Réserve" : "❌ Refus";
+    const msg = `🍃 *Rapport Agréage Moorea*
+━━━━━━━━━━━━━━
+📦 *${r.produit}* — ${r.fournisseur}
+🌍 Origine : ${r.origine || "—"}
+🌡️ Température : ${r.temperature ? r.temperature + "°C" : "—"}
+📋 Lot Moorea : ${r.lotMoorea || "—"}
+${r.nbColisAttendu || r.nbColisRecu ? `📦 Colis : ${r.nbColisRecu || "—"}/${r.nbColisAttendu || "—"}` : ""}
+⭐ Qualité : ${r.score ? r.score + "/5" : "—"}
+
+${dLabel}
+${r.nbColisRefuses ? `⚠️ ${r.nbColisRefuses} colis ${r.decision === "reserve" ? "en réserve" : "refusés"} (${r.pourcentage}%)` : ""}
+${r.observations ? `💬 ${r.observations}` : ""}
+
+📅 ${r.date} à ${r.heure}${r.agreeur ? ` · 👤 ${r.agreeur}` : ""}`;
+
+    // D'abord télécharger le PDF
+    await downloadPDF(r);
+    // Puis ouvrir WhatsApp
+    setTimeout(() => {
+      window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, "_blank");
+    }, 500);
   };
 
   const decisionLabel = (d: string) => d === "stock" ? "ENTREE EN STOCK" : d === "reserve" ? "RESERVE" : "REFUS";
@@ -901,12 +929,13 @@ export default function App() {
 
     if (r.photos&&r.photos.length>0) {
       checkY(60); section("PHOTOS");
-      const imgW=(CW-8)/3; const imgH=imgW*0.75;
+      const imgW=(CW-8)/3;
+      const imgH=imgW*0.75; // ratio 4:3 par defaut
       for (let i=0;i<Math.min(r.photos.length,6);i++) {
         const col=i%3; const rowI=Math.floor(i/3);
         if (rowI>0&&col===0) checkY(imgH+4);
         const px=M+col*(imgW+4); const py=y+rowI*(imgH+4);
-        try { doc.addImage(r.photos[i].url,"JPEG",px,py,imgW,imgH,undefined,"FAST"); } catch {}
+        try { doc.addImage(r.photos[i].url,"JPEG",px,py,imgW,imgH,"photo"+i,"MEDIUM"); } catch {}
       }
       y+=Math.ceil(Math.min(r.photos.length,6)/3)*(imgH+4)+8;
     }
@@ -1033,12 +1062,13 @@ export default function App() {
 
     if (r.photos&&r.photos.length>0) {
       checkY(60); section("PHOTOS");
-      const imgW=(CW-8)/3; const imgH=imgW*0.75;
+      const imgW=(CW-8)/3;
+      const imgH=imgW*0.75; // ratio 4:3 par defaut
       for (let i=0;i<Math.min(r.photos.length,6);i++) {
         const col=i%3; const rowI=Math.floor(i/3);
         if (rowI>0&&col===0) checkY(imgH+4);
         const px=M+col*(imgW+4); const py=y+rowI*(imgH+4);
-        try { doc.addImage(r.photos[i].url,"JPEG",px,py,imgW,imgH,undefined,"FAST"); } catch {}
+        try { doc.addImage(r.photos[i].url,"JPEG",px,py,imgW,imgH,"photo"+i,"MEDIUM"); } catch {}
       }
       y+=Math.ceil(Math.min(r.photos.length,6)/3)*(imgH+4)+8;
     }
@@ -1228,7 +1258,23 @@ export default function App() {
                     const files = Array.from(e.target.files || []);
                     files.forEach(file => {
                       const reader = new FileReader();
-                      reader.onload = ev => setPhotos(prev => [...prev, { name: file.name, url: ev.target?.result as string }]);
+                      reader.onload = ev => {
+                        const img = new Image();
+                        img.onload = () => {
+                          const canvas = document.createElement("canvas");
+                          const MAX = 1200;
+                          let w = img.width, h = img.height;
+                          if (w > MAX || h > MAX) {
+                            if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+                            else { w = Math.round(w * MAX / h); h = MAX; }
+                          }
+                          canvas.width = w; canvas.height = h;
+                          canvas.getContext("2d")!.drawImage(img, 0, 0, w, h);
+                          const compressed = canvas.toDataURL("image/jpeg", 0.75);
+                          setPhotos(prev => [...prev, { name: file.name, url: compressed }]);
+                        };
+                        img.src = ev.target?.result as string;
+                      };
                       reader.readAsDataURL(file);
                     });
                     e.target.value = "";
@@ -1465,8 +1511,11 @@ export default function App() {
                   <button onClick={() => downloadPDF(r)} style={{ flex: 1, padding: "13px 0", borderRadius: 12, border: "1.5px solid #e8e0d0", background: "#faf8f5", cursor: "pointer", fontSize: 14, fontWeight: 600, color: "#8a6f2e", fontFamily: "'Syne', sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, touchAction: "manipulation" }}>
                     📄 PDF
                   </button>
+                  <button onClick={() => partagerWhatsApp(r)} style={{ flex: 1, padding: "13px 0", borderRadius: 12, border: "none", background: "linear-gradient(135deg, #25d366, #128c7e)", cursor: "pointer", fontSize: 14, fontWeight: 700, color: "#fff", fontFamily: "'Syne', sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, touchAction: "manipulation" }}>
+                    WhatsApp
+                  </button>
                   <button onClick={() => envoyerEmail(r)} disabled={sendingId === (r.id || r.firebaseKey)} style={{ flex: 1, padding: "13px 0", borderRadius: 12, border: "none", background: sendingId === (r.id || r.firebaseKey) ? "#d1d5db" : "linear-gradient(135deg, #c8a84b, #a8882b)", cursor: sendingId === (r.id || r.firebaseKey) ? "not-allowed" : "pointer", fontSize: 14, fontWeight: 700, color: "#fff", fontFamily: "'Syne', sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, touchAction: "manipulation" }}>
-                    {sendingId === (r.id || r.firebaseKey) ? "⏳ Envoi…" : "✉ Renvoyer"}
+                    {sendingId === (r.id || r.firebaseKey) ? "⏳…" : "✉ Mail"}
                   </button>
                   <button onClick={() => chargerRapportEdition(r)} style={{ padding: "13px 14px", borderRadius: 12, border: "1.5px solid #bfdbfe", background: "#eff6ff", cursor: "pointer", fontSize: 16, touchAction: "manipulation" }}>
                     ✏️
