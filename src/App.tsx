@@ -268,37 +268,46 @@ export default function App() {
       showToast("⚠ Précisez Réserve ou Refus", "error");
       return;
     }
-    const { date, heure } = now();
-    const decisionFinale = conformite === "conforme" ? "stock" : decision;
-
     setSendingId("new");
-    showToast("⏳ Upload des photos…");
 
     try {
-      // Upload photos sur ImgBB
-      const photoUrls = photos.length > 0 ? await uploadPhotosImgBB(photos) : [];
-
+      const { date, heure } = now();
+      const decisionFinale = conformite === "conforme" ? "stock" : decision;
       const rapport = {
         fournisseur, agreeur, nbColisRecu, nbColisAttendu, produit, conditionnement, poids, origine,
         lotMoorea, lotFournisseur, temperature, notes,
         conformite, decision: decisionFinale, pourcentage, nbColisTotal,
         nbColisRefuses: nbColisRefuses !== null ? nbColisRefuses : null,
         nbPhotos: photos.length,
-        photoUrls, // liens ImgBB
+        photoUrls: [],
         poidsStatut, poidsEcart, etiquetteAbsente, etiquette,
         observations, score, date, heure,
         timestamp: Date.now(),
         id: Date.now().toString(),
       };
 
-      const rapportAvecPhotos = { ...rapport, photos }; // avec base64 pour le PDF
-
+      // 1. Enregistre dans Firebase
       const rapportsRef = ref(db, "rapports");
-      await push(rapportsRef, rapport);
-      showToast("⏳ Envoi de l'email…");
-      await envoyerEmail(rapportAvecPhotos);
+      const newRef = await push(rapportsRef, rapport);
+
+      // 2. Envoie l'email immédiatement sans photos
+      const rapportAvecPhotos = { ...rapport, photos };
+      envoyerEmail(rapportAvecPhotos); // pas de await — fire and forget
+
+      // 3. Reset et navigation immédiate
       reset();
       setVue("historique");
+
+      // 4. Upload photos en arrière-plan et met à jour Firebase
+      if (photos.length > 0) {
+        uploadPhotosImgBB(photos).then(photoUrls => {
+          if (photoUrls.length > 0 && newRef.key) {
+            const updateRef = ref(db, `rapports/${newRef.key}`);
+            push(updateRef, { photoUrls }); // update silencieux
+          }
+        });
+      }
+
     } catch {
       showToast("Erreur lors de l'envoi", "error");
     } finally {
@@ -679,6 +688,11 @@ export default function App() {
       const htmlContent = buildEmailHTML(r);
       const subject = `Rapport Agréage Moorea - ${r.produit} | ${r.fournisseur} | Lot ${r.lotMoorea || "-"} | ${r.date}`;
 
+      // Générer le PDF en base64
+      const pdfDataUri = await generatePDFBase64(r);
+      const pdfBase64 = pdfDataUri.split(",")[1];
+      const pdfName = `rapport-${r.produit}-${r.date}.pdf`.replace(/\//g, "-");
+
       const response = await fetch("/api/send-email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -686,6 +700,10 @@ export default function App() {
           to: ["agreage@moorea.fr"],
           subject,
           html: htmlContent,
+          attachments: [{
+            filename: pdfName,
+            content: pdfBase64,
+          }],
         }),
       });
 
@@ -693,13 +711,157 @@ export default function App() {
         const err = await response.json();
         throw new Error(err.error || "Erreur envoi");
       }
-      showToast("✉ Email envoyé avec succès");
+      showToast("✉ Email envoyé avec PDF !");
     } catch (err: any) {
       console.error(err);
       showToast(`Erreur : ${err.message || "Envoi échoué"}`, "error");
     } finally {
       setSendingId(null);
     }
+  };
+
+  // ─── GÉNÉRER PDF EN BASE64 (pour email) ───
+  const generatePDFBase64 = async (r: any): Promise<string> => {
+    const doc = new jsPDF({ unit: "mm", format: "a4" });
+    const W = 210; const M = 14; const CW = W - M * 2;
+    let y = 0;
+    const addPage = () => { doc.addPage(); y = 14; };
+    const checkY = (needed = 10) => { if (y + needed > 275) addPage(); };
+
+    doc.setFillColor(10, 10, 10); doc.rect(0, 0, W, 22, "F");
+    doc.setFillColor(200, 168, 75); doc.rect(0, 22, W, 2, "F");
+    doc.setTextColor(200, 168, 75); doc.setFont("helvetica", "bold"); doc.setFontSize(14);
+    doc.text("MOOREA", M, 14);
+    doc.setTextColor(255, 255, 255); doc.setFontSize(10);
+    doc.text("Rapport Qualite - Arrivages", M + 32, 14);
+    doc.setTextColor(150, 150, 150); doc.setFontSize(8);
+    doc.text(`${r.date} a ${r.heure}`, W - M, 14, { align: "right" });
+    y = 32;
+
+    const dc = decisionColor(r.decision);
+    doc.setFillColor(dc[0], dc[1], dc[2]);
+    doc.roundedRect(M, y, CW, 12, 3, 3, "F");
+    doc.setTextColor(255, 255, 255); doc.setFont("helvetica", "bold"); doc.setFontSize(12);
+    doc.text(decisionLabel(r.decision), W / 2, y + 8, { align: "center" });
+    y += 18;
+
+    const section = (title: string) => {
+      checkY(14);
+      doc.setFillColor(245, 243, 238); doc.rect(M, y, CW, 8, "F");
+      doc.setFillColor(200, 168, 75); doc.rect(M, y, 3, 8, "F");
+      doc.setTextColor(138, 111, 46); doc.setFont("helvetica", "bold"); doc.setFontSize(8);
+      doc.text(title, M + 6, y + 5.5); y += 12;
+    };
+    const row = (label: string, value: string, bold = false) => {
+      checkY(7);
+      doc.setTextColor(107, 114, 128); doc.setFont("helvetica", "normal"); doc.setFontSize(8);
+      doc.text(label + " :", M + 2, y);
+      doc.setTextColor(26, 46, 26); if (bold) doc.setFont("helvetica", "bold");
+      doc.text(value || "-", M + 45, y); doc.setFont("helvetica", "normal"); y += 6;
+    };
+
+    section("INFORMATIONS DU COLIS");
+    row("Fournisseur", r.fournisseur, true); row("Produit", r.produit, true);
+    if (r.agreeur) row("Agreeur", r.agreeur);
+    row("Origine", r.origine);
+    if (r.poids) row("Poids", r.poids);
+    if (r.conditionnement) row("Conditionnement", r.conditionnement);
+    if (r.lotMoorea) row("N Lot Moorea", r.lotMoorea);
+    if (r.lotFournisseur) row("N Lot Fournisseur", r.lotFournisseur);
+    if (r.temperature) row("Temperature reception", r.temperature + " C");
+    if (r.nbColisAttendu) row("Colis attendus", r.nbColisAttendu);
+    if (r.nbColisRecu) row("Colis recus", r.nbColisRecu);
+    y += 4;
+
+    section("CONFORMITE");
+    const conf = r.conformite === "conforme" ? "CONFORME" : "NON CONFORME";
+    const confColors: [number,number,number] = r.conformite === "conforme" ? [22,163,74] : [220,38,38];
+    doc.setFillColor(...confColors);
+    doc.roundedRect(M+2, y-2, 70, 9, 2, 2, "F");
+    doc.setTextColor(255,255,255); doc.setFont("helvetica","bold"); doc.setFontSize(9);
+    doc.text(conf, M+6, y+4.5); y+=12;
+
+    section("QUALITE VISUELLE");
+    const noteLabels: Record<number,string> = {1:"Insuffisant",2:"Passable",3:"Correct",4:"Bon",5:"Excellent"};
+    const noteColors2: Record<number,[number,number,number]> = {1:[239,68,68],2:[249,115,22],3:[234,179,8],4:[34,197,94],5:[21,128,61]};
+    const q = r.notes?.qualite;
+    if (q > 0) {
+      const nc = noteColors2[q];
+      doc.setFillColor(...nc);
+      doc.roundedRect(M+2,y-2,60,9,2,2,"F");
+      doc.setTextColor(255,255,255); doc.setFont("helvetica","bold"); doc.setFontSize(9);
+      doc.text(`${q}/5 - ${noteLabels[q]}`,M+6,y+4.5); y+=12;
+    }
+
+    section("POIDS");
+    if (r.poidsStatut==="ok") {
+      doc.setFillColor(240,253,244); doc.roundedRect(M+2,y-2,50,9,2,2,"F");
+      doc.setTextColor(22,163,74); doc.setFont("helvetica","bold"); doc.setFontSize(9);
+      doc.text("Poids OK",M+6,y+4.5);
+    } else if (r.poidsStatut==="ecart") {
+      doc.setFillColor(255,251,235); doc.roundedRect(M+2,y-2,80,9,2,2,"F");
+      doc.setTextColor(217,119,6); doc.setFont("helvetica","bold"); doc.setFontSize(9);
+      doc.text(`Ecart${r.poidsEcart?" : "+r.poidsEcart:""}`,M+6,y+4.5);
+    }
+    y+=12;
+
+    section("CONFORMITE ETIQUETTE");
+    if (r.etiquetteAbsente) {
+      doc.setFillColor(254,242,242); doc.roundedRect(M+2,y-2,50,9,2,2,"F");
+      doc.setTextColor(220,38,38); doc.setFont("helvetica","bold"); doc.setFontSize(9);
+      doc.text("Etiquette absente",M+6,y+4.5); y+=12;
+    } else {
+      const cols=3; const itemW=CW/cols;
+      ETIQUETTE_ITEMS.forEach((item,idx) => {
+        const col=idx%cols; const rowIdx=Math.floor(idx/cols);
+        const ix=M+col*itemW; const iy=y+rowIdx*8; checkY(8);
+        const ok=r.etiquette?.[item.id]!==false;
+        doc.setFillColor(ok?240:254,ok?253:242,ok?244:242);
+        doc.roundedRect(ix,iy-1,itemW-2,7,1.5,1.5,"F");
+        doc.setTextColor(ok?22:220,ok?163:38,ok?74:38);
+        doc.setFont("helvetica",ok?"normal":"bold"); doc.setFontSize(7.5);
+        doc.text(`${ok?"OK":"X"} ${item.label}`,ix+3,iy+4);
+      });
+      y+=Math.ceil(ETIQUETTE_ITEMS.length/3)*8+6;
+    }
+
+    if (r.decision!=="stock"&&r.nbColisRefuses!==null) {
+      checkY(20);
+      const dc2=decisionColor(r.decision);
+      doc.setFillColor(dc2[0],dc2[1],dc2[2]);
+      doc.roundedRect(M,y,CW,18,3,3,"F");
+      doc.setTextColor(255,255,255); doc.setFont("helvetica","bold"); doc.setFontSize(10);
+      const label2=r.decision==="reserve"?"Colis en reserve":"Colis refuses";
+      doc.text(`${label2} : ${r.nbColisRefuses} / ${r.nbColisTotal} (${r.pourcentage}%)`,W/2,y+11,{align:"center"});
+      y+=24;
+    }
+
+    if (r.observations) {
+      checkY(20); section("COMMENTAIRE");
+      const lines=doc.splitTextToSize(r.observations,CW-8);
+      doc.setFillColor(250,248,245); doc.roundedRect(M,y-2,CW,lines.length*5+8,3,3,"F");
+      doc.setTextColor(107,114,128); doc.setFont("helvetica","italic"); doc.setFontSize(8.5);
+      doc.text(lines,M+4,y+4); y+=lines.length*5+12;
+    }
+
+    if (r.photos&&r.photos.length>0) {
+      checkY(60); section("PHOTOS");
+      const imgW=(CW-8)/3; const imgH=imgW*0.75;
+      for (let i=0;i<Math.min(r.photos.length,6);i++) {
+        const col=i%3; const rowI=Math.floor(i/3);
+        if (rowI>0&&col===0) checkY(imgH+4);
+        const px=M+col*(imgW+4); const py=y+rowI*(imgH+4);
+        try { doc.addImage(r.photos[i].url,"JPEG",px,py,imgW,imgH,undefined,"FAST"); } catch {}
+      }
+      y+=Math.ceil(Math.min(r.photos.length,6)/3)*(imgH+4)+8;
+    }
+
+    doc.setFillColor(10,10,10); doc.rect(0,285,W,12,"F");
+    doc.setFillColor(200,168,75); doc.rect(0,285,W,1,"F");
+    doc.setTextColor(150,150,150); doc.setFont("helvetica","normal"); doc.setFontSize(7);
+    doc.text(`Genere par Moorea - Agreage Rungis - ${r.date}${r.lotMoorea?" - Lot "+r.lotMoorea:""}`,W/2,291,{align:"center"});
+
+    return doc.output("datauristring");
   };
 
   // ─── GÉNÉRER + TÉLÉCHARGER PDF ───
