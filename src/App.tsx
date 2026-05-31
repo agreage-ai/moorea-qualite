@@ -145,6 +145,41 @@ function F({ label, required, children }: { label: string; required?: boolean; c
   );
 }
 
+function AutocompleteInput({ value, onChange, suggestions, placeholder, required }: {
+  value: string;
+  onChange: (v: string) => void;
+  suggestions: string[];
+  placeholder?: string;
+  required?: boolean;
+}) {
+  const [show, setShow] = useState(false);
+  const filtered = suggestions.filter(s => s.toLowerCase().includes(value.toLowerCase()) && s.toLowerCase() !== value.toLowerCase()).slice(0, 6);
+
+  return (
+    <div style={{ position: "relative" }}>
+      <input
+        value={value}
+        onChange={e => { onChange(e.target.value); setShow(true); }}
+        onFocus={() => setShow(true)}
+        onBlur={() => setTimeout(() => setShow(false), 150)}
+        placeholder={placeholder}
+        required={required}
+      />
+      {show && filtered.length > 0 && (
+        <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "#fff", border: "1.5px solid #c8a84b", borderRadius: 10, zIndex: 100, boxShadow: "0 4px 16px rgba(0,0,0,0.12)", overflow: "hidden", marginTop: 2 }}>
+          {filtered.map((s, i) => (
+            <div key={i} onMouseDown={() => { onChange(s); setShow(false); }}
+              style={{ padding: "10px 14px", cursor: "pointer", fontSize: 14, color: "#1a2e1a", borderBottom: i < filtered.length - 1 ? "1px solid #f0ede6" : "none", background: "#fff" }}
+              onMouseEnter={e => (e.currentTarget.style.background = "#faf8f3")}
+              onMouseLeave={e => (e.currentTarget.style.background = "#fff")}
+            >{s}</div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function App() {
   const [rapports, setRapports] = useState<any[]>([]);
   const [vue, setVue] = useState("form");
@@ -229,29 +264,43 @@ export default function App() {
   };
 
   const partagerWhatsApp = async (r: any) => {
-    const dLabel = r.decision === "stock" ? "✅ CONFORME — Entrée en stock" : r.decision === "reserve" ? "⚠️ NON CONFORME — Réserve" : "❌ NON CONFORME — Refus";
-    const scoreNum = r.score ? parseFloat(r.score) : null;
-    const suggestion = scoreNum ? (scoreNum >= 4 ? "✅ Conforme" : scoreNum >= 3 ? "⚠️ Réserve" : "❌ Non conforme") : "";
-    const msg = `🍃 *RAPPORT AGRÉAGE MOOREA*${r.numeroRapport ? ` — ${r.numeroRapport}` : ""}
-━━━━━━━━━━━━━━━━━
-📅 ${r.date} à ${r.heure}${r.agreeur ? ` · 👤 ${r.agreeur}` : ""}
-📦 *${r.produit}*
-🏭 Fournisseur : ${r.fournisseur}
-🌍 Origine : ${r.origine || "—"}
-🌡️ Température : ${r.temperature ? r.temperature + "°C" : "—"}
-📋 Lot Moorea : ${r.lotMoorea || "—"}
-📦 Colis : ${r.nbColisRecu || "—"}/${r.nbColisAttendu || "—"}
-⚖️ Poids : ${r.poids ? r.poids + " kg" : "—"}
-━━━━━━━━━━━━━━━━━
-${scoreNum ? `⭐ Score qualité : *${r.score}/5* ${suggestion}` : ""}
-${r.notes?.qualite ? `👁 Qualité visuelle : ${r.notes.qualite}/5` : ""}
-${r.notes?.couleur ? `🎨 Couleur : ${r.notes.couleur}/5` : ""}
-${r.notes?.emballage ? `📦 Emballage : ${r.notes.emballage}/5` : ""}
-━━━━━━━━━━━━━━━━━
-*${dLabel}*
-${r.nbColisRefuses ? `⚠️ ${r.nbColisRefuses} colis ${r.decision === "reserve" ? "en réserve" : "refusés"} / ${r.nbColisTotal} (${r.pourcentage}%)` : ""}
-${r.observations ? `💬 _${r.observations}_` : ""}
-━━━━━━━━━━━━━━━━━
+    const dLabel = r.decision === "stock"
+      ? "✅ Conforme — Entrée en stock"
+      : r.decision === "reserve"
+      ? "⚠️ Réserve"
+      : "❌ Refus";
+
+    const colisLine = (() => {
+      if (!r.nbColisRecu) return "";
+      if (r.nbColisAttendu && parseInt(r.nbColisRecu) < parseInt(r.nbColisAttendu)) {
+        return `${r.nbColisRecu} colis reçus / ${r.nbColisAttendu} attendus — ${parseInt(r.nbColisAttendu) - parseInt(r.nbColisRecu)} colis manquants`;
+      } else if (r.nbColisAttendu && parseInt(r.nbColisRecu) > parseInt(r.nbColisAttendu)) {
+        return `${r.nbColisRecu} colis reçus / ${r.nbColisAttendu} attendus — ${parseInt(r.nbColisRecu) - parseInt(r.nbColisAttendu)} colis en surplus`;
+      }
+      return `${r.nbColisRecu} colis reçus`;
+    })();
+
+    const reserveLine = r.nbColisRefuses && r.nbColisTotal
+      ? r.decision === "reserve"
+        ? `${dLabel} — ${r.nbColisRefuses} colis en réserve (${r.pourcentage}%)`
+        : `${dLabel} — ${r.nbColisRefuses} colis refusés (${r.pourcentage}%)`
+      : dLabel;
+
+    const scoreLine = r.score
+      ? `Score qualité : ${r.score}/5${r.observations ? " — " + r.observations : ""}`
+      : r.observations || "";
+
+    const msg = `🍃 RAPPORT AGRÉAGE MOOREA
+Rapport n° ${r.numeroRapport || "—"}
+${r.date} · ${r.heure}${r.agreeur ? " · " + r.agreeur : ""}
+
+${r.produit}${r.origine ? " — " + r.origine : ""}
+Fournisseur : ${r.fournisseur}${r.lotMoorea ? " · Lot " + r.lotMoorea : ""}
+${colisLine}
+
+${reserveLine}
+${scoreLine}
+
 _PDF joint_`;
 
     await downloadPDF(r);
@@ -278,6 +327,11 @@ _PDF joint_`;
     : null;
 
   const score = scoreGlobal(notes);
+
+  // Suggestions depuis l'historique
+  const suggestionsProduits = [...new Set(rapports.map(r => r.produit).filter(Boolean))];
+  const suggestionsFournisseurs = [...new Set(rapports.map(r => r.fournisseur).filter(Boolean))];
+  const suggestionsOrigines = [...new Set(rapports.map(r => r.origine).filter(Boolean))];
 
   // ─── UPLOAD PHOTOS VERS IMGBB ───
   const uploadPhotosImgBB = async (photosList: { name: string; url: string }[]) => {
@@ -1109,10 +1163,10 @@ _PDF joint_`;
             </div>
 
             <div className="card" style={{ padding: "24px", marginBottom: 16 }}>
-              <F label="Fournisseur" required><input value={fournisseur} onChange={e => setFournisseur(e.target.value)} placeholder="Nom du fournisseur" /></F>
+              <F label="Fournisseur" required><AutocompleteInput value={fournisseur} onChange={setFournisseur} suggestions={suggestionsFournisseurs} placeholder="Nom du fournisseur" required /></F>
               <div className="grid-2">
-                <F label="Produit" required><input value={produit} onChange={e => setProduit(e.target.value)} placeholder="Ex: Tomates, Fraises…" /></F>
-                <F label="Origine" required><input value={origine} onChange={e => setOrigine(e.target.value)} placeholder="Ex: Espagne, France…" /></F>
+                <F label="Produit" required><AutocompleteInput value={produit} onChange={setProduit} suggestions={suggestionsProduits} placeholder="Ex: Tomates, Fraises…" required /></F>
+                <F label="Origine" required><AutocompleteInput value={origine} onChange={setOrigine} suggestions={suggestionsOrigines} placeholder="Ex: Espagne, France…" required /></F>
                 <F label="Poids (kg)"><input type="number" step="0.1" min="0" value={poids} onChange={e => setPoids(e.target.value)} placeholder="Ex: 5.5" /></F>
                 <F label="Conditionnement"><input value={conditionnement} onChange={e => setConditionnement(e.target.value)} placeholder="Ex: Barquette 500g, Filet…" /></F>
                 <F label="N° Lot Moorea"><input type="number" value={lotMoorea} onChange={e => setLotMoorea(e.target.value)} placeholder="Ex: 123456" /></F>
