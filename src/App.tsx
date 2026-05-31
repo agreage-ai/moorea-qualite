@@ -173,6 +173,7 @@ export default function App() {
   const [searchDate, setSearchDate] = useState("");
   const [searchText, setSearchText] = useState("");
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [editRapport, setEditRapport] = useState<any | null>(null); // rapport en cours d'édition
 
   // ─── FIREBASE: écoute en temps réel ───
   useEffect(() => {
@@ -273,7 +274,10 @@ export default function App() {
     try {
       const { date, heure } = now();
       const decisionFinale = conformite === "conforme" ? "stock" : decision;
+      const numeroRapport = `MQ-${Date.now().toString().slice(-6)}`;
+
       const rapport = {
+        numeroRapport,
         fournisseur, agreeur, nbColisRecu, nbColisAttendu, produit, conditionnement, poids, origine,
         lotMoorea, lotFournisseur, temperature, notes,
         conformite, decision: decisionFinale, pourcentage, nbColisTotal,
@@ -286,30 +290,81 @@ export default function App() {
         id: Date.now().toString(),
       };
 
+      const rapportAvecPhotos = { ...rapport, photos };
+
       // 1. Enregistre dans Firebase
       const rapportsRef = ref(db, "rapports");
-      const newRef = await push(rapportsRef, rapport);
+      await push(rapportsRef, rapport);
 
-      // 2. Envoie l'email immédiatement sans photos
-      const rapportAvecPhotos = { ...rapport, photos };
-      envoyerEmail(rapportAvecPhotos); // pas de await — fire and forget
+      // 2. Envoie email avec PDF (avec photos)
+      await envoyerEmail(rapportAvecPhotos);
 
-      // 3. Reset et navigation immédiate
+      // 3. Reset et navigation
       reset();
       setVue("historique");
 
-      // 4. Upload photos en arrière-plan et met à jour Firebase
-      if (photos.length > 0) {
-        uploadPhotosImgBB(photos).then(photoUrls => {
-          if (photoUrls.length > 0 && newRef.key) {
-            const updateRef = ref(db, `rapports/${newRef.key}`);
-            push(updateRef, { photoUrls }); // update silencieux
-          }
-        });
-      }
-
     } catch {
       showToast("Erreur lors de l'envoi", "error");
+    } finally {
+      setSendingId(null);
+    }
+  };
+
+  // ─── CHARGER RAPPORT POUR EDITION ───
+  const chargerRapportEdition = (r: any) => {
+    setFournisseur(r.fournisseur || "");
+    setAgreeur(r.agreeur || "");
+    setNbColisRecu(r.nbColisRecu || "");
+    setNbColisAttendu(r.nbColisAttendu || "");
+    setProduit(r.produit || "");
+    setConditionnement(r.conditionnement || "");
+    setPoids(r.poids || "");
+    setOrigine(r.origine || "");
+    setLotMoorea(r.lotMoorea || "");
+    setLotFournisseur(r.lotFournisseur || "");
+    setTemperature(r.temperature || "");
+    setNotes(r.notes || initialNotes);
+    setConformite(r.conformite || "");
+    setDecision(r.decision === "stock" ? "" : r.decision || "");
+    setPourcentage(r.pourcentage || "");
+    setNbColisTotal(r.nbColisTotal || "");
+    setPoidsStatut(r.poidsStatut || "");
+    setPoidsEcart(r.poidsEcart || "");
+    setEtiquetteAbsente(r.etiquetteAbsente || false);
+    setEtiquette(r.etiquette || initialEtiquette);
+    setObservations(r.observations || "");
+    setPhotos([]);
+    setEditRapport(r);
+    setVue("form");
+  };
+
+  // ─── SAUVEGARDER EDITION ───
+  const sauvegarderEdition = async () => {
+    if (!fournisseur || !produit || !conformite) {
+      showToast("⚠ Champs requis manquants", "error");
+      return;
+    }
+    setSendingId("edit");
+    try {
+      const decisionFinale = conformite === "conforme" ? "stock" : decision;
+      const updates = {
+        fournisseur, agreeur, nbColisRecu, nbColisAttendu, produit, conditionnement, poids, origine,
+        lotMoorea, lotFournisseur, temperature, notes,
+        conformite, decision: decisionFinale, pourcentage, nbColisTotal,
+        nbColisRefuses: nbColisRefuses !== null ? nbColisRefuses : null,
+        poidsStatut, poidsEcart, etiquetteAbsente, etiquette,
+        observations, score,
+        modifiedAt: Date.now(),
+      };
+      const rapportRef = ref(db, `rapports/${editRapport.firebaseKey}`);
+      const { set } = await import("firebase/database");
+      await set(rapportRef, { ...editRapport, ...updates });
+      showToast("✓ Rapport modifié");
+      reset();
+      setEditRapport(null);
+      setVue("historique");
+    } catch {
+      showToast("Erreur lors de la modification", "error");
     } finally {
       setSendingId(null);
     }
@@ -691,7 +746,7 @@ export default function App() {
       // Générer le PDF en base64
       const pdfDataUri = await generatePDFBase64(r);
       const pdfBase64 = pdfDataUri.split(",")[1];
-      const pdfName = `rapport-${r.produit}-${r.date}.pdf`.replace(/\//g, "-");
+      const pdfName = `rapport-${(r.produit || "").replace(/[^a-zA-Z0-9]/g, "-")}-${(r.date || "").replace(/\//g, "-")}.pdf`;
 
       const response = await fetch("/api/send-email", {
         method: "POST",
@@ -1279,9 +1334,14 @@ export default function App() {
               )}
             </div>
 
-            <button className="btn-primary" onClick={soumettre} disabled={sendingId === "new"} style={{ opacity: sendingId === "new" ? 0.7 : 1 }}>
-              {sendingId === "new" ? "⏳ Envoi en cours…" : "✉ Envoyer le rapport"}
+            <button className="btn-primary" onClick={editRapport ? sauvegarderEdition : soumettre} disabled={sendingId === "new" || sendingId === "edit"} style={{ opacity: (sendingId === "new" || sendingId === "edit") ? 0.7 : 1 }}>
+              {sendingId === "new" ? "⏳ Envoi en cours…" : sendingId === "edit" ? "⏳ Modification…" : editRapport ? "💾 Sauvegarder les modifications" : "✉ Envoyer le rapport"}
             </button>
+            {editRapport && (
+              <button onClick={() => { reset(); setEditRapport(null); setVue("historique"); }} style={{ width: "100%", marginTop: 8, padding: "14px", borderRadius: 12, border: "1.5px solid #e5e7eb", background: "#fff", cursor: "pointer", fontSize: 15, color: "#6b7280", fontFamily: "'Syne', sans-serif", fontWeight: 600 }}>
+                Annuler
+              </button>
+            )}
           </div>
         )}
 
@@ -1339,6 +1399,7 @@ export default function App() {
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
                   <div>
                     <p style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 16, color: "#1a2e1a", marginBottom: 3 }}>{r.produit}</p>
+                    {r.numeroRapport && <p style={{ fontSize: 11, color: "#c8a84b", fontWeight: 700, marginBottom: 2, letterSpacing: "0.5px" }}>#{r.numeroRapport}</p>}
                     <p style={{ fontSize: 13, color: "#6b7280", marginBottom: 2 }}>{r.fournisseur}{r.origine ? ` · ${r.origine}` : ""}{r.conditionnement ? ` · ${r.conditionnement}` : ""}{r.poids ? ` · ${r.poids}` : ""}</p>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 4 }}>
                       {r.lotMoorea && <span style={{ fontSize: 11, background: "#faf8f0", color: "#8a6f2e", border: "1px solid #e0d0a0", borderRadius: 6, padding: "2px 8px", fontWeight: 600 }}>Lot Moorea: {r.lotMoorea}</span>}
@@ -1406,6 +1467,9 @@ export default function App() {
                   </button>
                   <button onClick={() => envoyerEmail(r)} disabled={sendingId === (r.id || r.firebaseKey)} style={{ flex: 1, padding: "13px 0", borderRadius: 12, border: "none", background: sendingId === (r.id || r.firebaseKey) ? "#d1d5db" : "linear-gradient(135deg, #c8a84b, #a8882b)", cursor: sendingId === (r.id || r.firebaseKey) ? "not-allowed" : "pointer", fontSize: 14, fontWeight: 700, color: "#fff", fontFamily: "'Syne', sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, touchAction: "manipulation" }}>
                     {sendingId === (r.id || r.firebaseKey) ? "⏳ Envoi…" : "✉ Renvoyer"}
+                  </button>
+                  <button onClick={() => chargerRapportEdition(r)} style={{ padding: "13px 14px", borderRadius: 12, border: "1.5px solid #bfdbfe", background: "#eff6ff", cursor: "pointer", fontSize: 16, touchAction: "manipulation" }}>
+                    ✏️
                   </button>
                   <button onClick={() => setConfirmDelete(r.firebaseKey)} style={{ padding: "13px 14px", borderRadius: 12, border: "1.5px solid #fca5a5", background: "#fef2f2", cursor: "pointer", fontSize: 16, touchAction: "manipulation" }}>
                     🗑
