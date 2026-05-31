@@ -746,7 +746,7 @@ export default function App() {
       // Générer le PDF en base64
       const pdfDataUri = await generatePDFBase64(r);
       const pdfBase64 = pdfDataUri.split(",")[1];
-      const pdfName = `rapport-${r.produit}-${r.date}.pdf`.replace(/\//g, "-");
+      const pdfName = `rapport-${(r.produit || "").replace(/[^a-zA-Z0-9]/g, "-")}-${(r.date || "").replace(/\//g, "-")}.pdf`;
 
       const response = await fetch("/api/send-email", {
         method: "POST",
