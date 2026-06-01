@@ -1106,11 +1106,13 @@ _PDF joint_`;
   // ─── GÉNÉRER + TÉLÉCHARGER PDF ───
   const downloadPDF = async (r: any) => {
     const pdfDataUri = await generatePDFBase64(r);
-    const win = window.open();
-    if (win) {
-      win.document.write(`<iframe src="${pdfDataUri}" style="width:100%;height:100%;border:none;position:fixed;top:0;left:0;" />`);
-      win.document.title = `Rapport ${r.numeroRapport || r.produit}`;
-    }
+    const pdfBase64 = pdfDataUri.split(",")[1];
+    const byteChars = atob(pdfBase64);
+    const byteArr = new Uint8Array(byteChars.length);
+    for (let i = 0; i < byteChars.length; i++) byteArr[i] = byteChars.charCodeAt(i);
+    const blob = new Blob([byteArr], { type: "application/pdf" });
+    const url = URL.createObjectURL(blob);
+    window.open(url, "_blank");
     showToast("📄 PDF ouvert");
   };
 
@@ -1558,7 +1560,7 @@ _PDF joint_`;
 
                 <div className="action-row" style={{ marginTop: 12, paddingTop: 10, borderTop: "1px solid #f0f0f0" }}>
                   <button onClick={() => downloadPDF(r)} style={{ flex: 1, padding: "13px 0", borderRadius: 12, border: "1.5px solid #e8e0d0", background: "#faf8f5", cursor: "pointer", fontSize: 14, fontWeight: 600, color: "#8a6f2e", fontFamily: "'Syne', sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, touchAction: "manipulation" }}>
-                    📄 PDF
+                    📤 Envoyer PDF
                   </button>
                   <button onClick={() => partagerWhatsApp(r)} style={{ flex: 1, padding: "13px 0", borderRadius: 12, border: "none", background: "linear-gradient(135deg, #25d366, #128c7e)", cursor: "pointer", fontSize: 14, fontWeight: 700, color: "#fff", fontFamily: "'Syne', sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, touchAction: "manipulation" }}>
                     WhatsApp
