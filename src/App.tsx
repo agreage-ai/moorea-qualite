@@ -208,7 +208,7 @@ export default function App() {
   const [etiquette, setEtiquette] = useState(initialEtiquette);
   const [observations, setObservations] = useState("");
   const [controles, setControles] = useState<Record<string, string>>({
-    temperature: "", fraicheur: "", sanitaire: "", maturite: "", coloration: ""
+    temperature: "C", fraicheur: "C", sanitaire: "C", maturite: "C", coloration: "C"
   });
   const [sendingId, setSendingId] = useState<string | null>(null);
   const [searchDate, setSearchDate] = useState("");
@@ -238,8 +238,17 @@ export default function App() {
   };
 
   const scoreGlobal = (n: Record<string, number>) => {
-    const vals = Object.values(n).filter(v => v > 0);
-    if (!vals.length) return null;
+    const { qualite = 0, couleur = 0, emballage = 0 } = n;
+    if (!qualite && !couleur && !emballage) return null;
+    // Poids : qualite 40%, couleur 40%, emballage 20%
+    const filled = (qualite > 0 ? 1 : 0) + (couleur > 0 ? 1 : 0) + (emballage > 0 ? 1 : 0);
+    if (filled === 0) return null;
+    // Si tous les critères sont remplis : calcul pondéré
+    if (qualite > 0 && couleur > 0 && emballage > 0) {
+      return (qualite * 0.4 + couleur * 0.4 + emballage * 0.2).toFixed(1);
+    }
+    // Si seulement quelques critères : moyenne simple
+    const vals = [qualite, couleur, emballage].filter(v => v > 0);
     return (vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1);
   };
 
@@ -250,7 +259,7 @@ export default function App() {
     setNotes(initialNotes); setConformite(""); setDecision(""); setPourcentage(""); setNbColisTotal(""); setNbColisAEcarter("");
     setPhotos([]); setPoidsStatut(""); setPoidsEcart("");
     setEtiquetteAbsente(false); setEtiquette(initialEtiquette); setObservations("");
-    setControles({ temperature: "", fraicheur: "", sanitaire: "", maturite: "", coloration: "" });
+    setControles({ temperature: "C", fraicheur: "C", sanitaire: "C", maturite: "C", coloration: "C" });
   };
 
   const supprimerRapport = async (firebaseKey: string) => {
@@ -1156,6 +1165,63 @@ _PDF joint_`;
     showToast("📄 PDF ouvert");
   };
 
+  // ─── SCANNER ÉTIQUETTE VIA IA ───
+  const [scanning, setScanning] = useState(false);
+
+  const scannerEtiquette = async (file: File) => {
+    setScanning(true);
+    showToast("⏳ Analyse de l'étiquette…");
+    try {
+      const reader = new FileReader();
+      const base64 = await new Promise<string>((resolve) => {
+        reader.onload = e => resolve((e.target?.result as string).split(",")[1]);
+        reader.readAsDataURL(file);
+      });
+
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 500,
+          messages: [{
+            role: "user",
+            content: [
+              {
+                type: "image",
+                source: { type: "base64", media_type: file.type, data: base64 }
+              },
+              {
+                type: "text",
+                text: `Tu es un assistant d'agréage au marché de Rungis. Analyse cette étiquette de colis et extrait uniquement ces informations en JSON strict (pas de markdown, pas d'explication) :
+{"produit":"nom du produit","origine":"pays d'origine","fournisseur":"nom du fournisseur ou producteur","lotFournisseur":"numéro de lot fournisseur chiffres seulement","poids":"poids en kg chiffres seulement sans unité"}
+Si une info est absente mets "". Ne mets que ce que tu vois clairement.`
+              }
+            ]
+          }]
+        })
+      });
+
+      const data = await response.json();
+      const text = data.content?.[0]?.text || "";
+      const clean = text.replace(/```json|```/g, "").trim();
+      const parsed = JSON.parse(clean);
+
+      if (parsed.produit) setProduit(parsed.produit);
+      if (parsed.origine) setOrigine(parsed.origine);
+      if (parsed.fournisseur) setFournisseur(parsed.fournisseur);
+      if (parsed.lotFournisseur) setLotFournisseur(parsed.lotFournisseur);
+      if (parsed.poids) setPoids(parsed.poids);
+
+      showToast("✅ Étiquette analysée !");
+    } catch {
+      showToast("Erreur lors de l'analyse", "error");
+    } finally {
+      setScanning(false);
+    }
+  };
+
+  // ─── RENDER ───
   return (
     <div className="app">
       <style>{styles}</style>
@@ -1194,7 +1260,30 @@ _PDF joint_`;
               </div>
             </div>
 
-            {/* COLIS RECU / ATTENDU */}
+            {/* SCANNER ÉTIQUETTE */}
+            <div style={{ marginBottom: 16, background: "#fff", border: "1.5px solid #e8e0d0", borderRadius: 20, padding: "16px 24px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: scanning ? 12 : 0 }}>
+                <div style={{ width: 40, height: 40, borderRadius: 10, background: "#f0f4ff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0 }}>🔍</div>
+                <div style={{ flex: 1 }}>
+                  <p style={{ fontSize: 13, fontWeight: 700, color: "#1a2e1a", fontFamily: "'Syne', sans-serif", marginBottom: 2 }}>Scanner l'étiquette</p>
+                  <p style={{ fontSize: 11, color: "#9ca3af" }}>L'IA remplit automatiquement produit, origine, fournisseur, lot et poids</p>
+                </div>
+                <div>
+                  <input type="file" accept="image/*" id="scan-input" style={{ display: "none" }}
+                    onChange={e => { const f = e.target.files?.[0]; if (f) scannerEtiquette(f); e.target.value = ""; }} />
+                  <label htmlFor="scan-input" style={{
+                    display: "inline-flex", alignItems: "center", gap: 6, padding: "10px 18px",
+                    background: scanning ? "#d1d5db" : "linear-gradient(135deg, #3b82f6, #1d4ed8)",
+                    color: "#fff", borderRadius: 10, cursor: scanning ? "not-allowed" : "pointer",
+                    fontSize: 14, fontWeight: 700, fontFamily: "'Syne', sans-serif",
+                    boxShadow: scanning ? "none" : "0 2px 8px rgba(59,130,246,0.4)",
+                    pointerEvents: scanning ? "none" : "auto"
+                  }}>
+                    {scanning ? "⏳ Analyse…" : "📷 Scanner"}
+                  </label>
+                </div>
+              </div>
+            </div>
             <div style={{ marginBottom: 16, background: "#fff", border: "1.5px solid #e8e0d0", borderRadius: 20, padding: "20px 24px" }}>
               <div className="section-title">📦 Colis</div>
               <div className="grid-2">
