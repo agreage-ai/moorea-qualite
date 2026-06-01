@@ -145,6 +145,41 @@ function F({ label, required, children }: { label: string; required?: boolean; c
   );
 }
 
+function AutocompleteInput({ value, onChange, suggestions, placeholder, required }: {
+  value: string;
+  onChange: (v: string) => void;
+  suggestions: string[];
+  placeholder?: string;
+  required?: boolean;
+}) {
+  const [show, setShow] = useState(false);
+  const filtered = suggestions.filter(s => s.toLowerCase().includes(value.toLowerCase()) && s.toLowerCase() !== value.toLowerCase()).slice(0, 6);
+
+  return (
+    <div style={{ position: "relative" }}>
+      <input
+        value={value}
+        onChange={e => { onChange(e.target.value); setShow(true); }}
+        onFocus={() => setShow(true)}
+        onBlur={() => setTimeout(() => setShow(false), 150)}
+        placeholder={placeholder}
+        required={required}
+      />
+      {show && filtered.length > 0 && (
+        <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "#fff", border: "1.5px solid #c8a84b", borderRadius: 10, zIndex: 100, boxShadow: "0 4px 16px rgba(0,0,0,0.12)", overflow: "hidden", marginTop: 2 }}>
+          {filtered.map((s, i) => (
+            <div key={i} onMouseDown={() => { onChange(s); setShow(false); }}
+              style={{ padding: "10px 14px", cursor: "pointer", fontSize: 14, color: "#1a2e1a", borderBottom: i < filtered.length - 1 ? "1px solid #f0ede6" : "none", background: "#fff" }}
+              onMouseEnter={e => (e.currentTarget.style.background = "#faf8f3")}
+              onMouseLeave={e => (e.currentTarget.style.background = "#fff")}
+            >{s}</div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function App() {
   const [rapports, setRapports] = useState<any[]>([]);
   const [vue, setVue] = useState("form");
@@ -293,6 +328,11 @@ _PDF joint_`;
 
   const score = scoreGlobal(notes);
 
+  // Suggestions depuis l'historique
+  const suggestionsProduits = [...new Set(rapports.map(r => r.produit).filter(Boolean))];
+  const suggestionsFournisseurs = [...new Set(rapports.map(r => r.fournisseur).filter(Boolean))];
+  const suggestionsOrigines = [...new Set(rapports.map(r => r.origine).filter(Boolean))];
+
   // ─── UPLOAD PHOTOS VERS IMGBB ───
   const uploadPhotosImgBB = async (photosList: { name: string; url: string }[]) => {
     const IMGBB_KEY = "06c9cef29906bf8f060e882ed5540240";
@@ -408,7 +448,8 @@ _PDF joint_`;
     setEtiquetteAbsente(r.etiquetteAbsente || false);
     setEtiquette(r.etiquette || initialEtiquette);
     setObservations(r.observations || "");
-    setPhotos([]);
+    // Charge les photos existantes depuis ImgBB pour les afficher
+    setPhotos(r.photoUrls?.length > 0 ? r.photoUrls.map((url: string) => ({ name: "photo", url })) : []);
     setEditRapport(r);
     setVue("form");
   };
@@ -422,6 +463,19 @@ _PDF joint_`;
     setSendingId("edit");
     try {
       const decisionFinale = conformite === "conforme" ? "stock" : decision;
+
+      // Upload uniquement les nouvelles photos (celles sans URL ImgBB)
+      let photoUrls = editRapport.photoUrls || [];
+      const newPhotos = photos.filter((p: any) => !p.url?.startsWith("http"));
+      if (newPhotos.length > 0) {
+        showToast("⏳ Upload des photos…");
+        const newUrls = await uploadPhotosImgBB(newPhotos);
+        photoUrls = [...photoUrls, ...newUrls];
+      }
+      // Garde aussi les photos ImgBB déjà dans le state
+      const existingImgBB = photos.filter((p: any) => p.url?.startsWith("http")).map((p: any) => p.url);
+      photoUrls = [...new Set([...existingImgBB, ...photoUrls])];
+
       const updates = {
         fournisseur, agreeur, nbColisRecu, nbColisAttendu, produit, conditionnement, poids, origine,
         lotMoorea, lotFournisseur, temperature, notes,
@@ -431,6 +485,8 @@ _PDF joint_`;
         nbColisRefuses: nbColisRefuses !== null ? nbColisRefuses : null,
         poidsStatut, poidsEcart, etiquetteAbsente, etiquette,
         observations, score,
+        photoUrls,
+        nbPhotos: photoUrls.length,
         modifiedAt: Date.now(),
       };
       const rapportRef = ref(db, `rapports/${editRapport.firebaseKey}`);
@@ -829,7 +885,7 @@ _PDF joint_`;
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          to: ["agreage@moorea.fr"],
+          to: ["agreage@moorea.fr", "commercial@moorea.fr", "qualite@moorea.fr"],
           subject,
           html: htmlContent,
           attachments: [{
@@ -1019,10 +1075,11 @@ _PDF joint_`;
       doc.text(lines,M+4,y+4); y+=lines.length*5+12;
     }
 
-    // Photos : utilise photoUrls (ImgBB) si disponibles, sinon base64
-    const allPhotos = r.photoUrls?.length > 0
-      ? r.photoUrls.map((url: string) => ({ url }))
-      : r.photos || [];
+    // Photos : combine photoUrls (ImgBB) ET photos base64 si disponibles
+    const allPhotos = [
+      ...(r.photoUrls?.length > 0 ? r.photoUrls.map((url: string) => ({ url })) : []),
+      ...(r.photos?.length > 0 ? r.photos.filter((p: any) => p.url) : []),
+    ];
 
     if (allPhotos.length > 0) {
       checkY(60); section("PHOTOS");
@@ -1049,12 +1106,14 @@ _PDF joint_`;
   // ─── GÉNÉRER + TÉLÉCHARGER PDF ───
   const downloadPDF = async (r: any) => {
     const pdfDataUri = await generatePDFBase64(r);
-    const pdfName = `rapport-${(r.produit || "").replace(/[^a-zA-Z0-9]/g, "-")}-${(r.date || "").replace(/\//g, "-")}.pdf`;
-    const link = document.createElement("a");
-    link.href = pdfDataUri;
-    link.download = pdfName;
-    link.click();
-    showToast("📄 PDF téléchargé");
+    const pdfBase64 = pdfDataUri.split(",")[1];
+    const byteChars = atob(pdfBase64);
+    const byteArr = new Uint8Array(byteChars.length);
+    for (let i = 0; i < byteChars.length; i++) byteArr[i] = byteChars.charCodeAt(i);
+    const blob = new Blob([byteArr], { type: "application/pdf" });
+    const url = URL.createObjectURL(blob);
+    window.open(url, "_blank");
+    showToast("📄 PDF ouvert");
   };
 
   return (
@@ -1123,10 +1182,10 @@ _PDF joint_`;
             </div>
 
             <div className="card" style={{ padding: "24px", marginBottom: 16 }}>
-              <F label="Fournisseur" required><input value={fournisseur} onChange={e => setFournisseur(e.target.value)} placeholder="Nom du fournisseur" /></F>
+              <F label="Fournisseur" required><AutocompleteInput value={fournisseur} onChange={setFournisseur} suggestions={suggestionsFournisseurs} placeholder="Nom du fournisseur" required /></F>
               <div className="grid-2">
-                <F label="Produit" required><input value={produit} onChange={e => setProduit(e.target.value)} placeholder="Ex: Tomates, Fraises…" /></F>
-                <F label="Origine" required><input value={origine} onChange={e => setOrigine(e.target.value)} placeholder="Ex: Espagne, France…" /></F>
+                <F label="Produit" required><AutocompleteInput value={produit} onChange={setProduit} suggestions={suggestionsProduits} placeholder="Ex: Tomates, Fraises…" required /></F>
+                <F label="Origine" required><AutocompleteInput value={origine} onChange={setOrigine} suggestions={suggestionsOrigines} placeholder="Ex: Espagne, France…" required /></F>
                 <F label="Poids (kg)"><input type="number" step="0.1" min="0" value={poids} onChange={e => setPoids(e.target.value)} placeholder="Ex: 5.5" /></F>
                 <F label="Conditionnement"><input value={conditionnement} onChange={e => setConditionnement(e.target.value)} placeholder="Ex: Barquette 500g, Filet…" /></F>
                 <F label="N° Lot Moorea"><input type="number" value={lotMoorea} onChange={e => setLotMoorea(e.target.value)} placeholder="Ex: 123456" /></F>
@@ -1501,7 +1560,7 @@ _PDF joint_`;
 
                 <div className="action-row" style={{ marginTop: 12, paddingTop: 10, borderTop: "1px solid #f0f0f0" }}>
                   <button onClick={() => downloadPDF(r)} style={{ flex: 1, padding: "13px 0", borderRadius: 12, border: "1.5px solid #e8e0d0", background: "#faf8f5", cursor: "pointer", fontSize: 14, fontWeight: 600, color: "#8a6f2e", fontFamily: "'Syne', sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, touchAction: "manipulation" }}>
-                    📄 PDF
+                    📤 Envoyer PDF
                   </button>
                   <button onClick={() => partagerWhatsApp(r)} style={{ flex: 1, padding: "13px 0", borderRadius: 12, border: "none", background: "linear-gradient(135deg, #25d366, #128c7e)", cursor: "pointer", fontSize: 14, fontWeight: 700, color: "#fff", fontFamily: "'Syne', sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, touchAction: "manipulation" }}>
                     WhatsApp
