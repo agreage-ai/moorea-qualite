@@ -1172,10 +1172,22 @@ _PDF joint_`;
     setScanning(true);
     showToast("⏳ Analyse de l'étiquette…");
     try {
-      const reader = new FileReader();
+      // Compresse l'image avant envoi
       const base64 = await new Promise<string>((resolve) => {
-        reader.onload = e => resolve((e.target?.result as string).split(",")[1]);
-        reader.readAsDataURL(file);
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          const MAX = 800;
+          let w = img.width, h = img.height;
+          if (w > MAX || h > MAX) {
+            if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+            else { w = Math.round(w * MAX / h); h = MAX; }
+          }
+          canvas.width = w; canvas.height = h;
+          canvas.getContext("2d")!.drawImage(img, 0, 0, w, h);
+          resolve(canvas.toDataURL("image/jpeg", 0.8).split(",")[1]);
+        };
+        img.src = URL.createObjectURL(file);
       });
 
       const response = await fetch("/api/scan-etiquette", {
@@ -1185,7 +1197,10 @@ _PDF joint_`;
       });
 
       const data = await response.json();
+      if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+      
       const text = data.content?.[0]?.text || "";
+      if (!text) throw new Error("Réponse vide de l'IA");
       const clean = text.replace(/```json|```/g, "").trim();
       const parsed = JSON.parse(clean);
 
@@ -1196,8 +1211,9 @@ _PDF joint_`;
       if (parsed.poids) setPoids(parsed.poids);
 
       showToast("✅ Étiquette analysée !");
-    } catch {
-      showToast("Erreur lors de l'analyse", "error");
+    } catch (err: any) {
+      console.error("Scan error:", err);
+      showToast(`Erreur : ${err.message || "Analyse échouée"}`, "error");
     } finally {
       setScanning(false);
     }
