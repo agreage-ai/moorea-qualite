@@ -17,12 +17,12 @@ export default async function handler(req: Request) {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
-        'x-api-key': 're_Rgn9PcgZ_AMcZjZh9dck6b914YcaTpUDC',
+        'x-api-key': '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',
         'anthropic-version': '2023-06-01',
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'claude-opus-4-5',
+        model: 'claude-sonnet-4-6',
         max_tokens: 500,
         messages: [{
           role: 'user',
