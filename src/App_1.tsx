@@ -208,7 +208,7 @@ export default function App() {
   const [etiquette, setEtiquette] = useState(initialEtiquette);
   const [observations, setObservations] = useState("");
   const [controles, setControles] = useState<Record<string, string>>({
-    temperature: "", fraicheur: "", sanitaire: "", maturite: "", coloration: ""
+    temperature: "C", fraicheur: "C", sanitaire: "C", maturite: "C", coloration: "C"
   });
   const [sendingId, setSendingId] = useState<string | null>(null);
   const [searchDate, setSearchDate] = useState("");
@@ -259,7 +259,7 @@ export default function App() {
     setNotes(initialNotes); setConformite(""); setDecision(""); setPourcentage(""); setNbColisTotal(""); setNbColisAEcarter("");
     setPhotos([]); setPoidsStatut(""); setPoidsEcart("");
     setEtiquetteAbsente(false); setEtiquette(initialEtiquette); setObservations("");
-    setControles({ temperature: "", fraicheur: "", sanitaire: "", maturite: "", coloration: "" });
+    setControles({ temperature: "C", fraicheur: "C", sanitaire: "C", maturite: "C", coloration: "C" });
   };
 
   const supprimerRapport = async (firebaseKey: string) => {
@@ -1165,6 +1165,61 @@ _PDF joint_`;
     showToast("📄 PDF ouvert");
   };
 
+  // ─── SCANNER ÉTIQUETTE VIA IA ───
+  const [scanning, setScanning] = useState(false);
+
+  const scannerEtiquette = async (file: File) => {
+    setScanning(true);
+    showToast("⏳ Analyse de l'étiquette…");
+    try {
+      // Compresse l'image avant envoi
+      const base64 = await new Promise<string>((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          const MAX = 800;
+          let w = img.width, h = img.height;
+          if (w > MAX || h > MAX) {
+            if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+            else { w = Math.round(w * MAX / h); h = MAX; }
+          }
+          canvas.width = w; canvas.height = h;
+          canvas.getContext("2d")!.drawImage(img, 0, 0, w, h);
+          resolve(canvas.toDataURL("image/jpeg", 0.8).split(",")[1]);
+        };
+        img.src = URL.createObjectURL(file);
+      });
+
+      const response = await fetch("/api/scan-etiquette", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ base64, mediaType: file.type }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+      
+      const text = data.content?.[0]?.text || "";
+      if (!text) throw new Error("Réponse vide de l'IA");
+      const clean = text.replace(/```json|```/g, "").trim();
+      const parsed = JSON.parse(clean);
+
+      if (parsed.produit) setProduit(parsed.produit);
+      if (parsed.origine) setOrigine(parsed.origine);
+      if (parsed.fournisseur) setFournisseur(parsed.fournisseur);
+      if (parsed.lotFournisseur) setLotFournisseur(parsed.lotFournisseur);
+      if (parsed.poids) setPoids(parsed.poids);
+
+      showToast("✅ Étiquette analysée !");
+    } catch (err: any) {
+      console.error("Scan error:", err);
+      showToast(`Erreur : ${err.message || "Analyse échouée"}`, "error");
+    } finally {
+      setScanning(false);
+    }
+  };
+
+  // ─── RENDER ───
   return (
     <div className="app">
       <style>{styles}</style>
@@ -1203,7 +1258,30 @@ _PDF joint_`;
               </div>
             </div>
 
-            {/* COLIS RECU / ATTENDU */}
+            {/* SCANNER ÉTIQUETTE */}
+            <div style={{ marginBottom: 16, background: "#fff", border: "1.5px solid #e8e0d0", borderRadius: 20, padding: "16px 24px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: scanning ? 12 : 0 }}>
+                <div style={{ width: 40, height: 40, borderRadius: 10, background: "#f0f4ff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0 }}>🔍</div>
+                <div style={{ flex: 1 }}>
+                  <p style={{ fontSize: 13, fontWeight: 700, color: "#1a2e1a", fontFamily: "'Syne', sans-serif", marginBottom: 2 }}>Scanner l'étiquette</p>
+                  <p style={{ fontSize: 11, color: "#9ca3af" }}>L'IA remplit automatiquement produit, origine, fournisseur, lot et poids</p>
+                </div>
+                <div>
+                  <input type="file" accept="image/*" id="scan-input" style={{ display: "none" }}
+                    onChange={e => { const f = e.target.files?.[0]; if (f) scannerEtiquette(f); e.target.value = ""; }} />
+                  <label htmlFor="scan-input" style={{
+                    display: "inline-flex", alignItems: "center", gap: 6, padding: "10px 18px",
+                    background: scanning ? "#d1d5db" : "linear-gradient(135deg, #3b82f6, #1d4ed8)",
+                    color: "#fff", borderRadius: 10, cursor: scanning ? "not-allowed" : "pointer",
+                    fontSize: 14, fontWeight: 700, fontFamily: "'Syne', sans-serif",
+                    boxShadow: scanning ? "none" : "0 2px 8px rgba(59,130,246,0.4)",
+                    pointerEvents: scanning ? "none" : "auto"
+                  }}>
+                    {scanning ? "⏳ Analyse…" : "📷 Scanner"}
+                  </label>
+                </div>
+              </div>
+            </div>
             <div style={{ marginBottom: 16, background: "#fff", border: "1.5px solid #e8e0d0", borderRadius: 20, padding: "20px 24px" }}>
               <div className="section-title">📦 Colis</div>
               <div className="grid-2">
