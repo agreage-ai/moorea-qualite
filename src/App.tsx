@@ -916,8 +916,8 @@ _PDF joint_`;
       }
       showToast("✉ Email envoyé avec PDF !");
     } catch (err: any) {
-      console.error(err);
-      showToast(`Erreur : ${err.message || "Envoi échoué"}`, "error");
+      console.error("Email error:", err);
+      showToast(`Erreur : ${err.message || JSON.stringify(err)}`, "error");
     } finally {
       setSendingId(null);
     }
