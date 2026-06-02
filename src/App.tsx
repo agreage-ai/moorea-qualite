@@ -316,10 +316,10 @@ ${scoreLine}
 
 _PDF joint_`;
 
-    await downloadPDF(r);
-    setTimeout(() => {
-      window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, "_blank");
-    }, 500);
+    // Ouvre WhatsApp d'abord
+    window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, "_blank");
+    // Puis génère le PDF après
+    setTimeout(() => downloadPDF(r), 800);
   };
 
   const decisionLabel = (d: string) => d === "stock" ? "ENTREE EN STOCK" : d === "reserve" ? "RESERVE" : "REFUS";
@@ -404,6 +404,8 @@ _PDF joint_`;
         nbPhotos: photos.length,
         photoUrls: [],
         poidsStatut, poidsEcart, etiquetteAbsente, etiquette, controles,
+        observations, score,
+        date, heure,
         timestamp: Date.now(),
         id: Date.now().toString(),
       };
