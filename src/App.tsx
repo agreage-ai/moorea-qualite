@@ -1316,7 +1316,7 @@ _PDF joint_`;
                 <F label="Poids (kg)"><input type="number" step="0.1" min="0" value={poids} onChange={e => setPoids(e.target.value)} placeholder="Ex: 5.5" /></F>
                 <F label="Conditionnement"><input value={conditionnement} onChange={e => setConditionnement(e.target.value)} placeholder="Ex: Barquette 500g, Filet…" /></F>
                 <F label="N° Lot Moorea"><input type="number" value={lotMoorea} onChange={e => setLotMoorea(e.target.value)} placeholder="Ex: 123456" /></F>
-                <F label="N° Lot Fournisseur"><input type="number" value={lotFournisseur} onChange={e => setLotFournisseur(e.target.value)} placeholder="N° lot fournisseur" /></F>
+                <F label="N° Lot Fournisseur"><input value={lotFournisseur} onChange={e => setLotFournisseur(e.target.value)} placeholder="N° lot fournisseur" /></F>
               </div>
             </div>
 
