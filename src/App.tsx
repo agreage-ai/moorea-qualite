@@ -1146,7 +1146,128 @@ _PDF joint_`;
   };
 
 
-  // ─── GÉNÉRER + TÉLÉCHARGER PDF ───
+  // ─── BON DE RETOUR TRANSPORTEUR ───
+  const genererBonRetour = async (r: any) => {
+    const doc = new jsPDF({ unit: "mm", format: "a4" });
+    const W = 210; const M = 14; const CW = W - M * 2;
+
+    // Header
+    doc.setFillColor(10, 10, 10); doc.rect(0, 0, W, 22, "F");
+    doc.setFillColor(200, 168, 75); doc.rect(0, 22, W, 2, "F");
+    doc.setTextColor(200, 168, 75); doc.setFont("helvetica", "bold"); doc.setFontSize(14);
+    doc.text("MOOREA", M, 14);
+    doc.setTextColor(255, 255, 255); doc.setFontSize(10);
+    doc.text("Bon de Retour Transporteur", M + 32, 14);
+    doc.setTextColor(150, 150, 150); doc.setFontSize(8);
+    doc.text(`${r.date} a ${r.heure}`, W - M, 14, { align: "right" });
+
+    let y = 32;
+
+    // Titre
+    doc.setFillColor(220, 38, 38);
+    doc.roundedRect(M, y, CW, 14, 3, 3, "F");
+    doc.setTextColor(255, 255, 255); doc.setFont("helvetica", "bold"); doc.setFontSize(13);
+    doc.text("MARCHANDISE REFUSEE - BON DE REPRISE", W / 2, y + 9, { align: "center" });
+    y += 20;
+
+    // Numéro rapport
+    if (r.numeroRapport) {
+      doc.setTextColor(200, 168, 75); doc.setFont("helvetica", "bold"); doc.setFontSize(10);
+      doc.text(`Rapport N° ${r.numeroRapport}`, M, y);
+      y += 8;
+    }
+
+    // Section infos
+    const section = (title: string) => {
+      doc.setFillColor(245, 243, 238); doc.rect(M, y, CW, 8, "F");
+      doc.setFillColor(200, 168, 75); doc.rect(M, y, 3, 8, "F");
+      doc.setTextColor(138, 111, 46); doc.setFont("helvetica", "bold"); doc.setFontSize(8);
+      doc.text(title, M + 6, y + 5.5); y += 12;
+    };
+
+    section("INFORMATIONS DU COLIS");
+    const col1 = M + 2; const col2 = M + CW / 2 + 2;
+    const items: [string, string][] = [
+      ["Produit", r.produit],
+      ["Fournisseur", r.fournisseur],
+      ["Origine", r.origine || "-"],
+      ["Poids", r.poids ? r.poids + " kg" : "-"],
+      ["N Lot Fournisseur", r.lotFournisseur || "-"],
+      ["N Lot Moorea", r.lotMoorea || "-"],
+    ];
+    for (let i = 0; i < items.length; i += 2) {
+      doc.setTextColor(107, 114, 128); doc.setFont("helvetica", "normal"); doc.setFontSize(8);
+      doc.text(items[i][0] + " :", col1, y);
+      doc.setTextColor(26, 46, 26); doc.setFont("helvetica", "bold");
+      doc.text(items[i][1], col1 + 32, y);
+      if (items[i + 1]) {
+        doc.setTextColor(107, 114, 128); doc.setFont("helvetica", "normal");
+        doc.text(items[i + 1][0] + " :", col2, y);
+        doc.setTextColor(26, 46, 26); doc.setFont("helvetica", "bold");
+        doc.text(items[i + 1][1], col2 + 32, y);
+      }
+      doc.setFont("helvetica", "normal"); y += 7;
+    }
+    y += 4;
+
+    // Motif refus
+    section("MOTIF DU REFUS");
+    if (r.nbColisRefuses) {
+      doc.setFillColor(254, 242, 242); doc.roundedRect(M + 2, y - 2, CW - 4, 10, 2, 2, "F");
+      doc.setTextColor(220, 38, 38); doc.setFont("helvetica", "bold"); doc.setFontSize(10);
+      doc.text(`${r.nbColisRefuses} colis refuses sur ${r.nbColisTotal} (${r.pourcentage}%)`, M + 6, y + 5);
+      y += 14;
+    }
+    if (r.observations) {
+      const lines = doc.splitTextToSize(r.observations, CW - 8);
+      doc.setFillColor(250, 248, 245); doc.roundedRect(M, y - 2, CW, lines.length * 5 + 8, 3, 3, "F");
+      doc.setTextColor(107, 114, 128); doc.setFont("helvetica", "italic"); doc.setFontSize(8.5);
+      doc.text(lines, M + 4, y + 4); y += lines.length * 5 + 12;
+    }
+    y += 6;
+
+    // Signatures
+    section("SIGNATURES");
+    y += 4;
+
+    // Transporteur
+    doc.setFillColor(248, 248, 248); doc.roundedRect(M, y, CW / 2 - 4, 52, 3, 3, "F");
+    doc.setDrawColor(200, 200, 200); doc.roundedRect(M, y, CW / 2 - 4, 52, 3, 3, "S");
+    doc.setTextColor(107, 114, 128); doc.setFont("helvetica", "bold"); doc.setFontSize(9);
+    doc.text("TRANSPORTEUR", M + 4, y + 8);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(8);
+    doc.text("Nom : ___________________________", M + 4, y + 18);
+    doc.text("Societe : _______________________", M + 4, y + 26);
+    doc.text("Date : __________________________", M + 4, y + 34);
+    doc.text("Signature :", M + 4, y + 44);
+
+    // Agreeur
+    const col2x = M + CW / 2 + 4;
+    doc.setFillColor(248, 248, 248); doc.roundedRect(col2x, y, CW / 2 - 4, 52, 3, 3, "F");
+    doc.setDrawColor(200, 200, 200); doc.roundedRect(col2x, y, CW / 2 - 4, 52, 3, 3, "S");
+    doc.setTextColor(107, 114, 128); doc.setFont("helvetica", "bold"); doc.setFontSize(9);
+    doc.text("AGREEUR MOOREA", col2x + 4, y + 8);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(8);
+    doc.text(`Nom : ${r.agreeur || "___________________________"}`, col2x + 4, y + 18);
+    doc.text("Date : __________________________", col2x + 4, y + 26);
+    doc.text("Signature :", col2x + 4, y + 44);
+    y += 60;
+
+    // Footer
+    doc.setFillColor(10, 10, 10); doc.rect(0, 285, W, 12, "F");
+    doc.setFillColor(200, 168, 75); doc.rect(0, 285, W, 1, "F");
+    doc.setTextColor(150, 150, 150); doc.setFont("helvetica", "normal"); doc.setFontSize(7);
+    doc.text(`Moorea - Agreage Rungis - ${r.date}${r.numeroRapport ? " - " + r.numeroRapport : ""}`, W / 2, 291, { align: "center" });
+
+    // Ouvre le PDF
+    const pdfBase64 = doc.output("datauristring").split(",")[1];
+    const byteChars = atob(pdfBase64);
+    const byteArr = new Uint8Array(byteChars.length);
+    for (let i = 0; i < byteChars.length; i++) byteArr[i] = byteChars.charCodeAt(i);
+    const blob = new Blob([byteArr], { type: "application/pdf" });
+    window.open(URL.createObjectURL(blob), "_blank");
+    showToast("📄 Bon de retour généré");
+  };
   const downloadPDF = async (r: any) => {
     const pdfDataUri = await generatePDFBase64(r);
     const pdfBase64 = pdfDataUri.split(",")[1];
@@ -1727,6 +1848,11 @@ _PDF joint_`;
                   <button onClick={() => envoyerEmail(r)} disabled={sendingId === (r.id || r.firebaseKey)} style={{ flex: 1, padding: "13px 0", borderRadius: 12, border: "none", background: sendingId === (r.id || r.firebaseKey) ? "#d1d5db" : "linear-gradient(135deg, #c8a84b, #a8882b)", cursor: sendingId === (r.id || r.firebaseKey) ? "not-allowed" : "pointer", fontSize: 14, fontWeight: 700, color: "#fff", fontFamily: "'Syne', sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, touchAction: "manipulation" }}>
                     {sendingId === (r.id || r.firebaseKey) ? "⏳…" : "✉ Mail commercial"}
                   </button>
+                  {r.decision === "refus" && (
+                    <button onClick={() => genererBonRetour(r)} style={{ padding: "13px 14px", borderRadius: 12, border: "1.5px solid #fca5a5", background: "#fef2f2", cursor: "pointer", fontSize: 13, fontWeight: 700, color: "#dc2626", fontFamily: "'Syne', sans-serif", touchAction: "manipulation", whiteSpace: "nowrap" }}>
+                      🔄 Bon retour
+                    </button>
+                  )}
                   <button onClick={() => chargerRapportEdition(r)} style={{ padding: "13px 14px", borderRadius: 12, border: "1.5px solid #bfdbfe", background: "#eff6ff", cursor: "pointer", fontSize: 16, touchAction: "manipulation" }}>
                     ✏️
                   </button>
