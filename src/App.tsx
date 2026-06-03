@@ -1158,8 +1158,6 @@ _PDF joint_`;
     doc.text("MOOREA", M, 14);
     doc.setTextColor(255, 255, 255); doc.setFontSize(10);
     doc.text("Bon de Reprise Fournisseur", M + 32, 14);
-    doc.setTextColor(150, 150, 150); doc.setFontSize(8);
-    doc.text(`${r.date} a ${r.heure}`, W - M, 14, { align: "right" });
 
     let y = 32;
 
@@ -1230,17 +1228,16 @@ _PDF joint_`;
     y += 6;
 
     // Zone transporteur
-    section("TRANSPORTEUR - PRISE EN CHARGE DE LA MARCHANDISE");
-    doc.setFillColor(248, 248, 248); doc.roundedRect(M, y, CW, 60, 3, 3, "F");
-    doc.setDrawColor(200, 200, 200); doc.roundedRect(M, y, CW, 60, 3, 3, "S");
-    doc.setTextColor(107, 114, 128); doc.setFont("helvetica", "normal"); doc.setFontSize(8.5);
-    doc.text("Nom du transporteur : _________________________________", M + 6, y + 12);
-    doc.text("Immatriculation : _____________________________________", M + 6, y + 22);
-    doc.text("Motif retour accepte : ________________________________", M + 6, y + 32);
-    doc.text("Date de reprise : ____________________________________", M + 6, y + 42);
-    doc.setFont("helvetica", "bold"); doc.setFontSize(9);
-    doc.text("Signature transporteur :", M + 6, y + 52);
-    y += 68;
+    y += 6;
+    doc.setFillColor(248, 248, 248); doc.roundedRect(M, y, CW, 58, 3, 3, "F");
+    doc.setDrawColor(200, 200, 200); doc.roundedRect(M, y, CW, 58, 3, 3, "S");
+    doc.setTextColor(26, 46, 26); doc.setFont("helvetica", "bold"); doc.setFontSize(11);
+    doc.text("VISA DU TRANSPORTEUR", W / 2, y + 10, { align: "center" });
+    doc.setFont("helvetica", "normal"); doc.setFontSize(9);
+    doc.text("Transporteur : _________________________________", M + 8, y + 22);
+    doc.text("Immatriculation : _____________________________", M + 8, y + 32);
+    doc.text("Signature :", M + 8, y + 50);
+    y += 66;
 
     // Date et lieu
     y += 4;
