@@ -15,7 +15,23 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   try {
-    const { subject, html } = req.body;
+    const { subject, html, cc = [], attachments = [] } = req.body;
+
+    const payload = {
+      from: 'Moorea Agréage <agreage@moorea.fr>',
+      to: ['qualite@moorea.fr', 'commercial@moorea.fr'],
+      subject,
+      html,
+    };
+
+    if (cc.length > 0) payload.cc = cc;
+
+    if (attachments.length > 0) {
+      payload.attachments = attachments.map(a => ({
+        filename: a.filename,
+        content: a.content, // base64
+      }));
+    }
 
     const response = await fetch('https://api.resend.com/emails', {
       method: 'POST',
@@ -23,12 +39,7 @@ export default async function handler(req, res) {
         'Authorization': 'Bearer re_Rgn9PcgZ_AMcZjZh9dck6b914YcaTpUDC',
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        from: 'Moorea Agréage <agreage@moorea.fr>',
-        to: ['qualite@moorea.fr', 'commercial@moorea.fr'],
-        subject,
-        html,
-      }),
+      body: JSON.stringify(payload),
     });
 
     const data = await response.json();
