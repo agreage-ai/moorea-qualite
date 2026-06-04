@@ -405,6 +405,13 @@ _PDF joint_`;
       const rapport = {
         numeroRapport,
         fournisseur, agreeur, nbColisRecu, nbColisAttendu, produit, conditionnement, calibre, poids, origine,
+        lotMoorea, lotFournisseur, temperature, notes,
+        conformite, decision: decisionFinale, nbColisAEcarter,
+        pourcentage: pourcentageCalc !== null ? pourcentageCalc.toString() : "",
+        nbColisTotal: totalColis,
+        nbColisRefuses: nbColisRefuses !== null ? nbColisRefuses : null,
+        nbPhotos: photos.length,
+        photoUrls: [],
         poidsStatut, poidsEcart, etiquetteAbsente, etiquette, controles,
         observations, score,
         date, heure,
@@ -495,6 +502,12 @@ _PDF joint_`;
 
       const updates = {
         fournisseur, agreeur, nbColisRecu, nbColisAttendu, produit, conditionnement, calibre, poids, origine,
+        lotMoorea, lotFournisseur, temperature, notes,
+        conformite, decision: decisionFinale, nbColisAEcarter,
+        pourcentage: pourcentageCalc !== null ? pourcentageCalc.toString() : "",
+        nbColisTotal: totalColis,
+        nbColisRefuses: nbColisRefuses !== null ? nbColisRefuses : null,
+        poidsStatut, poidsEcart, etiquetteAbsente, etiquette, controles,
         observations, score,
         photoUrls,
         nbPhotos: photoUrls.length,
