@@ -1292,7 +1292,28 @@ _PDF joint_`;
     for (let i = 0; i < byteChars.length; i++) byteArr[i] = byteChars.charCodeAt(i);
     const blob = new Blob([byteArr], { type: "application/pdf" });
     window.open(URL.createObjectURL(blob), "_blank");
-    showToast("📄 Bon de reprise généré");
+
+    // Sauvegarder dans Firebase
+    try {
+      if (r.firebaseKey) {
+        const { set } = await import("firebase/database");
+        const rapportRef = ref(db, `rapports/${r.firebaseKey}`);
+        await set(rapportRef, {
+          ...r,
+          bonRepriseSigné: true,
+          transporteur: {
+            nom: sigNom,
+            prenom: sigPrenom,
+            immatriculation: sigImat,
+            signéLe: new Date().toLocaleDateString("fr-FR"),
+          },
+        });
+      }
+    } catch {
+      // Silencieux — le PDF est déjà généré
+    }
+
+    showToast("📄 Bon de reprise généré et sauvegardé");
     setSignatureModal(null);
   };
   const downloadPDF = async (r: any) => {
@@ -1889,6 +1910,11 @@ _PDF joint_`;
                       {r.temperature && <span style={{ fontSize: 11, background: "#eff6ff", color: "#1d4ed8", border: "1px solid #bfdbfe", borderRadius: 6, padding: "2px 8px", fontWeight: 600 }}>🌡 {r.temperature}°C</span>}
                     </div>
                     <p style={{ fontSize: 11, color: "#9ca3af" }}>{r.date} à {r.heure}</p>
+                    {r.bonRepriseSigné && r.transporteur && (
+                      <div style={{ marginTop: 4, background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 8, padding: "5px 10px", fontSize: 11, color: "#dc2626" }}>
+                        🔄 Bon signé · {r.transporteur.nom} {r.transporteur.prenom} · {r.transporteur.immatriculation} · {r.transporteur.signéLe}
+                      </div>
+                    )}
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
                     <span className="pill" style={{
@@ -1953,7 +1979,7 @@ _PDF joint_`;
                   <button onClick={() => envoyerEmail(r)} disabled={sendingId === (r.id || r.firebaseKey)} style={{ flex: 1, padding: "13px 0", borderRadius: 12, border: "none", background: sendingId === (r.id || r.firebaseKey) ? "#d1d5db" : "linear-gradient(135deg, #c8a84b, #a8882b)", cursor: sendingId === (r.id || r.firebaseKey) ? "not-allowed" : "pointer", fontSize: 14, fontWeight: 700, color: "#fff", fontFamily: "'Syne', sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, touchAction: "manipulation" }}>
                     {sendingId === (r.id || r.firebaseKey) ? "⏳…" : "✉ Mail commercial"}
                   </button>
-                  {r.decision !== "stock" && r.decision && (
+                  {r.decision === "refus" && (
                     <button onClick={() => genererBonRetour(r)} style={{ padding: "13px 14px", borderRadius: 12, border: "1.5px solid #fca5a5", background: "#fef2f2", cursor: "pointer", fontSize: 13, fontWeight: 700, color: "#dc2626", fontFamily: "'Syne', sans-serif", touchAction: "manipulation", whiteSpace: "nowrap" }}>
                       🔄 Bon retour
                     </button>
