@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import jsPDF from "jspdf";
 import emailjs from "@emailjs/browser";
-import { db, ref, push, onValue, remove } from "./firebase";
+import { db, ref, push, onValue, remove, auth, googleProvider, signInWithPopup, signOut, onAuthStateChanged } from "./firebase";
 
 // ─── CONFIG EMAILJS ───
 const EMAILJS_SERVICE_ID = "service_xheyrpi";
@@ -214,14 +214,44 @@ export default function App() {
   const [sendingId, setSendingId] = useState<string | null>(null);
   const [searchDate, setSearchDate] = useState("");
   const [searchText, setSearchText] = useState("");
+  const [filterDecision, setFilterDecision] = useState("");
+  const [filterFournisseur, setFilterFournisseur] = useState("");
+  const [filterProduit, setFilterProduit] = useState("");
+  const [filterDateDebut, setFilterDateDebut] = useState("");
+  const [filterDateFin, setFilterDateFin] = useState("");
+  const [showStats, setShowStats] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+  const [sortBy, setSortBy] = useState("date_desc"); // date_desc, date_asc, fournisseur, produit, decision, signé
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [editRapport, setEditRapport] = useState<any | null>(null);
-  const [signatureModal, setSignatureModal] = useState<any | null>(null); // rapport en attente de signature
+  const [user, setUser] = useState<any | null>(undefined);
+  const [signatureModal, setSignatureModal] = useState<any | null>(null);
   const [sigNom, setSigNom] = useState("");
   const [sigPrenom, setSigPrenom] = useState("");
   const [sigImat, setSigImat] = useState("");
   const signatureCanvasRef = useRef<HTMLCanvasElement>(null);
   const isDrawing = useRef(false);
+
+  // ─── AUTH ───
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+    });
+    return unsub;
+  }, []);
+
+  const loginGoogle = async () => {
+    try {
+      const result = await signInWithPopup(auth, googleProvider);
+      const email = result.user.email || "";
+      if (!email.endsWith("@moorea.fr")) {
+        await signOut(auth);
+        alert("Accès réservé aux comptes @moorea.fr");
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   // ─── FIREBASE: écoute en temps réel ───
   useEffect(() => {
@@ -729,7 +759,7 @@ _PDF joint_`;
           return `<span style="display:inline-block;margin:3px;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;background:${ok ? "#f0fdf4" : "#fef2f2"};color:${ok ? "#16a34a" : "#dc2626"};border:1px solid ${ok ? "#bbf7d0" : "#fca5a5"};">${ok ? "✓" : "✕"} ${item.label}</span>`
         }).join("");
 
-    const poidsHTML = r.poidsStatut === "ok"
+    const poidsHTML = (!r.poidsStatut || r.poidsStatut === "ok")
       ? `<span style="background:#f0fdf4;color:#16a34a;padding:5px 14px;border-radius:20px;font-size:13px;font-weight:600;border:1px solid #bbf7d0;">✓ Poids OK</span>`
       : r.poidsStatut === "ecart"
       ? `<span style="background:#fffbeb;color:#d97706;padding:5px 14px;border-radius:20px;font-size:13px;font-weight:600;border:1px solid #fcd34d;">⚠ Écart${r.poidsEcart ? " : " + r.poidsEcart : ""}</span>`
@@ -998,6 +1028,7 @@ _PDF joint_`;
     infoItems.push(["Produit", r.produit]);
     if (r.agreeur) infoItems.push(["Agreeur", r.agreeur]);
     infoItems.push(["Origine", r.origine || "-"]);
+    if (r.calibre) infoItems.push(["Calibre", r.calibre]);
     if (r.poids) infoItems.push(["Poids", r.poids + " kg"]);
     if (r.conditionnement) infoItems.push(["Conditionnement", r.conditionnement]);
     if (r.lotMoorea) infoItems.push(["N Lot Moorea", r.lotMoorea]);
@@ -1056,12 +1087,12 @@ _PDF joint_`;
       doc.setFillColor(...scoreColor2);
       doc.roundedRect(M+2, y-2, 100, 9, 2, 2, "F");
       doc.setTextColor(255,255,255); doc.setFont("helvetica","bold"); doc.setFontSize(9);
-      doc.text(`Score moyen : ${r.score}/5 - Suggestion : ${suggestion}`, M+6, y+4.5);
+      doc.text(`Score moyen : ${r.score}/5 - ${suggestion}`, M+6, y+4.5);
       y += 14;
     }
 
     section("POIDS");
-    if (r.poidsStatut==="ok") {
+    if (!r.poidsStatut || r.poidsStatut === "ok") {
       doc.setFillColor(240,253,244); doc.roundedRect(M+2,y-2,50,9,2,2,"F");
       doc.setTextColor(22,163,74); doc.setFont("helvetica","bold"); doc.setFontSize(9);
       doc.text("Poids OK",M+6,y+4.5);
@@ -1292,7 +1323,29 @@ _PDF joint_`;
     for (let i = 0; i < byteChars.length; i++) byteArr[i] = byteChars.charCodeAt(i);
     const blob = new Blob([byteArr], { type: "application/pdf" });
     window.open(URL.createObjectURL(blob), "_blank");
-    showToast("📄 Bon de reprise généré");
+
+    // Sauvegarder dans Firebase
+    try {
+      if (r.firebaseKey) {
+        const { set } = await import("firebase/database");
+        const rapportRef = ref(db, `rapports/${r.firebaseKey}`);
+        await set(rapportRef, {
+          ...r,
+          bonRepriseSigné: true,
+          transporteur: {
+            nom: sigNom,
+            prenom: sigPrenom,
+            immatriculation: sigImat,
+            signéLe: new Date().toLocaleDateString("fr-FR"),
+            signatureBase64: signatureDataUrl || "",
+          },
+        });
+      }
+    } catch {
+      // Silencieux — le PDF est déjà généré
+    }
+
+    showToast("📄 Bon de reprise généré et sauvegardé");
     setSignatureModal(null);
   };
   const downloadPDF = async (r: any) => {
@@ -1362,6 +1415,29 @@ _PDF joint_`;
   };
 
   // ─── RENDER ───
+
+  // Écran de chargement
+  if (user === undefined) return (
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#0a0a0a" }}>
+      <div style={{ width: 32, height: 32, border: "3px solid #c8a84b", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+    </div>
+  );
+
+  // Écran de connexion
+  if (!user || !user.email?.endsWith("@moorea.fr")) return (
+    <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "#0a0a0a", padding: 24 }}>
+      <div style={{ marginBottom: 32, textAlign: "center" }}>
+        <div style={{ fontSize: 40, fontWeight: 800, color: "#c8a84b", fontFamily: "'Syne', sans-serif", letterSpacing: 2 }}>MOOREA</div>
+        <div style={{ fontSize: 14, color: "rgba(255,255,255,0.5)", marginTop: 6 }}>Contrôle Qualité · Agréage Rungis</div>
+      </div>
+      <button onClick={loginGoogle} style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 28px", borderRadius: 14, border: "none", background: "#fff", cursor: "pointer", fontSize: 15, fontWeight: 600, color: "#1a1a1a", fontFamily: "'Syne', sans-serif", boxShadow: "0 4px 20px rgba(0,0,0,0.3)" }}>
+        <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#4285F4" d="M44.5 20H24v8.5h11.8C34.7 33.9 30.1 37 24 37c-7.2 0-13-5.8-13-13s5.8-13 13-13c3.1 0 5.9 1.1 8.1 2.9l6.4-6.4C34.6 4.1 29.6 2 24 2 11.8 2 2 11.8 2 24s9.8 22 22 22c11 0 21-8 21-22 0-1.3-.2-2.7-.5-4z"/><path fill="#34A853" d="M6.3 14.7l7 5.1C15 16.1 19.1 13 24 13c3.1 0 5.9 1.1 8.1 2.9l6.4-6.4C34.6 4.1 29.6 2 24 2 16.3 2 9.7 7.4 6.3 14.7z"/><path fill="#FBBC05" d="M24 46c5.9 0 10.9-2 14.6-5.4l-6.7-5.5C29.8 36.8 27 38 24 38c-6 0-11.1-4-12.9-9.6l-7 5.4C7.8 41.4 15.4 46 24 46z"/><path fill="#EA4335" d="M44.5 20H24v8.5h11.8c-1 2.8-2.9 5.1-5.3 6.6l6.7 5.5C41 37.1 45 31.1 45 24c0-1.3-.2-2.7-.5-4z"/></svg>
+        Se connecter avec Google
+      </button>
+      <p style={{ marginTop: 16, fontSize: 12, color: "rgba(255,255,255,0.3)" }}>Accès réservé aux comptes @moorea.fr</p>
+    </div>
+  );
+
   return (
     <div className="app">
       <style>{styles}</style>
@@ -1459,6 +1535,9 @@ _PDF joint_`;
               <button key={v} onClick={() => setVue(v)} style={{ padding: "9px 16px", borderRadius: 9, cursor: "pointer", fontSize: 14, fontWeight: vue === v ? 700 : 400, fontFamily: "'Syne', sans-serif", background: vue === v ? "#c8a84b" : "transparent", color: vue === v ? "#0a0a0a" : "rgba(255,255,255,0.6)", border: "none", transition: "all 0.2s", touchAction: "manipulation" }}>{label}</button>
             ))}
           </div>
+          <button onClick={() => signOut(auth)} title={user.email} style={{ padding: "8px 12px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.06)", cursor: "pointer", fontSize: 12, color: "rgba(255,255,255,0.5)", fontFamily: "'Syne', sans-serif", whiteSpace: "nowrap" }}>
+            {user.displayName?.split(" ")[0] || user.email?.split("@")[0]} · Déco
+          </button>
         </div>
       </div>
 
@@ -1676,7 +1755,7 @@ _PDF joint_`;
                     <span style={{ fontSize: 18 }}>{parseFloat(score) >= 4 ? "✅" : parseFloat(score) >= 3 ? "⚠️" : "❌"}</span>
                     <div>
                       <p style={{ fontSize: 13, fontWeight: 700, color: parseFloat(score) >= 4 ? "#15803d" : parseFloat(score) >= 3 ? "#92400e" : "#991b1b" }}>
-                        {parseFloat(score) >= 4 ? "Suggestion : Conforme" : parseFloat(score) >= 3 ? "Suggestion : Réserve" : "Suggestion : Non conforme"}
+                        {parseFloat(score) >= 4 ? "Conforme" : parseFloat(score) >= 3 ? "Réserve" : "Non conforme"}
                       </p>
                       <p style={{ fontSize: 11, color: "#6b7280" }}>L'agréeur décide en dernier</p>
                     </div>
@@ -1831,7 +1910,8 @@ _PDF joint_`;
         {vue === "historique" && (
           <div className="fade-up">
             {/* BARRE DE RECHERCHE */}
-            <div style={{ marginBottom: 16, display: "flex", gap: 10 }}>
+            {/* BARRE RECHERCHE + BOUTONS */}
+            <div style={{ marginBottom: 10, display: "flex", gap: 8 }}>
               <input
                 type="text"
                 value={searchText}
@@ -1839,29 +1919,203 @@ _PDF joint_`;
                 placeholder="🔍 Rechercher produit, fournisseur…"
                 style={{ flex: 2 }}
               />
-              <input
-                type="date"
-                value={searchDate}
-                onChange={e => setSearchDate(e.target.value)}
-                style={{ flex: 1 }}
-              />
-              {(searchText || searchDate) && (
-                <button onClick={() => { setSearchText(""); setSearchDate(""); }} style={{ padding: "10px 14px", borderRadius: 10, border: "1.5px solid #e5e7eb", background: "#fff", cursor: "pointer", fontSize: 13, color: "#6b7280", whiteSpace: "nowrap" }}>
-                  ✕ Effacer
-                </button>
-              )}
+              <select value={sortBy} onChange={e => setSortBy(e.target.value)} style={{ padding: "10px 10px", borderRadius: 10, border: "1.5px solid #e5e7eb", fontSize: 13, color: "#374151", background: "#fff", cursor: "pointer" }}>
+                <option value="date_desc">📅 Plus récent</option>
+                <option value="date_asc">📅 Plus ancien</option>
+                <option value="fournisseur">🏭 Fournisseur</option>
+                <option value="produit">🥦 Produit</option>
+                <option value="decision">📊 Décision</option>
+                <option value="signé">✅ Bon signé</option>
+              </select>
+              <button onClick={() => { setShowFilters(!showFilters); setShowStats(false); }} style={{ padding: "10px 14px", borderRadius: 10, border: `1.5px solid ${showFilters ? "#c8a84b" : "#e5e7eb"}`, background: showFilters ? "#faf8f0" : "#fff", cursor: "pointer", fontSize: 13, color: showFilters ? "#8a6f2e" : "#6b7280", fontWeight: 600, whiteSpace: "nowrap" }}>
+                🔽 Filtres
+              </button>
+              <button onClick={() => { setShowStats(!showStats); setShowFilters(false); }} style={{ padding: "10px 14px", borderRadius: 10, border: `1.5px solid ${showStats ? "#c8a84b" : "#e5e7eb"}`, background: showStats ? "#faf8f0" : "#fff", cursor: "pointer", fontSize: 13, color: showStats ? "#8a6f2e" : "#6b7280", fontWeight: 600, whiteSpace: "nowrap" }}>
+                📊 Stats
+              </button>
             </div>
 
+            {/* PANNEAU FILTRES */}
+            {showFilters && (
+              <div style={{ background: "#faf8f5", border: "1.5px solid #e8e0d0", borderRadius: 14, padding: 16, marginBottom: 14 }}>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 10 }}>
+                  <div style={{ flex: 1, minWidth: 140 }}>
+                    <label style={{ fontSize: 11, fontWeight: 600, color: "#6b7280", display: "block", marginBottom: 4 }}>DÉCISION</label>
+                    <select value={filterDecision} onChange={e => setFilterDecision(e.target.value)} style={{ width: "100%", padding: "9px 10px", borderRadius: 9, border: "1.5px solid #e5e7eb", fontSize: 13, background: "#fff" }}>
+                      <option value="">Toutes</option>
+                      <option value="refus">❌ Refus</option>
+                      <option value="reserve">⚠️ Réserve</option>
+                      <option value="stock">✅ Stock</option>
+                    </select>
+                  </div>
+                  <div style={{ flex: 1, minWidth: 140 }}>
+                    <label style={{ fontSize: 11, fontWeight: 600, color: "#6b7280", display: "block", marginBottom: 4 }}>FOURNISSEUR</label>
+                    <select value={filterFournisseur} onChange={e => setFilterFournisseur(e.target.value)} style={{ width: "100%", padding: "9px 10px", borderRadius: 9, border: "1.5px solid #e5e7eb", fontSize: 13, background: "#fff" }}>
+                      <option value="">Tous</option>
+                      {[...new Set(rapports.map(r => r.fournisseur).filter(Boolean))].sort().map(f => <option key={f} value={f}>{f}</option>)}
+                    </select>
+                  </div>
+                  <div style={{ flex: 1, minWidth: 140 }}>
+                    <label style={{ fontSize: 11, fontWeight: 600, color: "#6b7280", display: "block", marginBottom: 4 }}>PRODUIT</label>
+                    <select value={filterProduit} onChange={e => setFilterProduit(e.target.value)} style={{ width: "100%", padding: "9px 10px", borderRadius: 9, border: "1.5px solid #e5e7eb", fontSize: 13, background: "#fff" }}>
+                      <option value="">Tous</option>
+                      {[...new Set(rapports.map(r => r.produit).filter(Boolean))].sort().map(p => <option key={p} value={p}>{p}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "flex-end" }}>
+                  <div style={{ flex: 1, minWidth: 130 }}>
+                    <label style={{ fontSize: 11, fontWeight: 600, color: "#6b7280", display: "block", marginBottom: 4 }}>DATE DÉBUT</label>
+                    <input type="date" value={filterDateDebut} onChange={e => setFilterDateDebut(e.target.value)} style={{ width: "100%", padding: "9px 10px", borderRadius: 9, border: "1.5px solid #e5e7eb", fontSize: 13, boxSizing: "border-box" }} />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 130 }}>
+                    <label style={{ fontSize: 11, fontWeight: 600, color: "#6b7280", display: "block", marginBottom: 4 }}>DATE FIN</label>
+                    <input type="date" value={filterDateFin} onChange={e => setFilterDateFin(e.target.value)} style={{ width: "100%", padding: "9px 10px", borderRadius: 9, border: "1.5px solid #e5e7eb", fontSize: 13, boxSizing: "border-box" }} />
+                  </div>
+                  <button onClick={() => { setFilterDecision(""); setFilterFournisseur(""); setFilterProduit(""); setFilterDateDebut(""); setFilterDateFin(""); setSearchText(""); }} style={{ padding: "9px 14px", borderRadius: 9, border: "1.5px solid #fca5a5", background: "#fef2f2", cursor: "pointer", fontSize: 13, color: "#dc2626", fontWeight: 600, whiteSpace: "nowrap" }}>
+                    ✕ Réinitialiser
+                  </button>
+                </div>
+              </div>
+            )}
+
             {(() => {
+              // ─── FILTRAGE ───
+              const parseDate = (dateStr: string) => {
+                if (!dateStr) return null;
+                const [d, m, y] = dateStr.split("/");
+                return new Date(`${y}-${m}-${d}`);
+              };
               const filtered = rapports.filter(r => {
-                const matchText = !searchText || 
+                const matchText = !searchText ||
                   r.produit?.toLowerCase().includes(searchText.toLowerCase()) ||
                   r.fournisseur?.toLowerCase().includes(searchText.toLowerCase()) ||
                   r.lotMoorea?.toLowerCase().includes(searchText.toLowerCase()) ||
                   r.agreeur?.toLowerCase().includes(searchText.toLowerCase());
-                const matchDate = !searchDate || r.date === new Date(searchDate).toLocaleDateString("fr-FR");
-                return matchText && matchDate;
+                const matchDecision = !filterDecision || r.decision === filterDecision;
+                const matchFournisseur = !filterFournisseur || r.fournisseur === filterFournisseur;
+                const matchProduit = !filterProduit || r.produit === filterProduit;
+                const rDate = parseDate(r.date);
+                const matchDebut = !filterDateDebut || (rDate && rDate >= new Date(filterDateDebut));
+                const matchFin = !filterDateFin || (rDate && rDate <= new Date(filterDateFin));
+                return matchText && matchDecision && matchFournisseur && matchProduit && matchDebut && matchFin;
               });
+
+              // ─── TRI ───
+              const decisionOrder: Record<string, number> = { refus: 0, reserve: 1, stock: 2 };
+              const sorted = [...filtered].sort((a, b) => {
+                switch (sortBy) {
+                  case "date_asc": return (parseDate(a.date)?.getTime() || 0) - (parseDate(b.date)?.getTime() || 0);
+                  case "date_desc": return (parseDate(b.date)?.getTime() || 0) - (parseDate(a.date)?.getTime() || 0);
+                  case "fournisseur": return (a.fournisseur || "").localeCompare(b.fournisseur || "");
+                  case "produit": return (a.produit || "").localeCompare(b.produit || "");
+                  case "decision": return (decisionOrder[a.decision] ?? 3) - (decisionOrder[b.decision] ?? 3);
+                  case "signé": return (b.bonRepriseSigné ? 1 : 0) - (a.bonRepriseSigné ? 1 : 0);
+                  default: return 0;
+                }
+              });
+
+              // ─── STATS ───
+              if (showStats) {
+                const total = filtered.length;
+                const nbRefus = filtered.filter(r => r.decision === "refus").length;
+                const nbReserve = filtered.filter(r => r.decision === "reserve").length;
+                const nbStock = filtered.filter(r => r.decision === "stock").length;
+                const tauxRefus = total > 0 ? Math.round((nbRefus / total) * 100) : 0;
+                const tauxReserve = total > 0 ? Math.round((nbReserve / total) * 100) : 0;
+
+                // Stats par fournisseur
+                const statsFourn: Record<string, { total: number; refus: number; reserve: number }> = {};
+                filtered.forEach(r => {
+                  if (!r.fournisseur) return;
+                  if (!statsFourn[r.fournisseur]) statsFourn[r.fournisseur] = { total: 0, refus: 0, reserve: 0 };
+                  statsFourn[r.fournisseur].total++;
+                  if (r.decision === "refus") statsFourn[r.fournisseur].refus++;
+                  if (r.decision === "reserve") statsFourn[r.fournisseur].reserve++;
+                });
+                const topFourn = Object.entries(statsFourn).sort((a, b) => b[1].refus - a[1].refus).slice(0, 5);
+
+                // Stats par produit
+                const statsProd: Record<string, { total: number; refus: number }> = {};
+                filtered.forEach(r => {
+                  if (!r.produit) return;
+                  if (!statsProd[r.produit]) statsProd[r.produit] = { total: 0, refus: 0 };
+                  statsProd[r.produit].total++;
+                  if (r.decision === "refus") statsProd[r.produit].refus++;
+                });
+                const topProd = Object.entries(statsProd).sort((a, b) => b[1].refus - a[1].refus).slice(0, 5);
+
+                return (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                    {/* Chiffres clés */}
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 10 }}>
+                      {[
+                        { label: "Total rapports", value: total, color: "#1a2e1a", bg: "#f0fdf4" },
+                        { label: "Taux de refus", value: `${tauxRefus}%`, color: "#dc2626", bg: "#fef2f2" },
+                        { label: "Taux de réserve", value: `${tauxReserve}%`, color: "#d97706", bg: "#fffbeb" },
+                        { label: "Bons signés", value: filtered.filter(r => r.bonRepriseSigné).length, color: "#7c3aed", bg: "#f5f3ff" },
+                      ].map(s => (
+                        <div key={s.label} style={{ background: s.bg, borderRadius: 14, padding: "16px", textAlign: "center" }}>
+                          <div style={{ fontSize: 28, fontWeight: 800, color: s.color, fontFamily: "'Syne', sans-serif" }}>{s.value}</div>
+                          <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>{s.label}</div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Répartition */}
+                    <div style={{ background: "#fff", border: "1.5px solid #e5e7eb", borderRadius: 14, padding: 16 }}>
+                      <p style={{ fontSize: 13, fontWeight: 700, color: "#1a2e1a", marginBottom: 12, fontFamily: "'Syne', sans-serif" }}>Répartition</p>
+                      {[
+                        { label: "✅ Entrée stock", count: nbStock, color: "#22c55e" },
+                        { label: "⚠️ Réserve", count: nbReserve, color: "#f59e0b" },
+                        { label: "❌ Refus", count: nbRefus, color: "#ef4444" },
+                      ].map(s => (
+                        <div key={s.label} style={{ marginBottom: 10 }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                            <span style={{ fontSize: 13, color: "#374151" }}>{s.label}</span>
+                            <span style={{ fontSize: 13, fontWeight: 700, color: s.color }}>{s.count} ({total > 0 ? Math.round(s.count / total * 100) : 0}%)</span>
+                          </div>
+                          <div style={{ height: 8, background: "#f3f4f6", borderRadius: 4 }}>
+                            <div style={{ height: 8, background: s.color, borderRadius: 4, width: `${total > 0 ? s.count / total * 100 : 0}%`, transition: "width 0.5s" }} />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Top fournisseurs */}
+                    {topFourn.length > 0 && (
+                      <div style={{ background: "#fff", border: "1.5px solid #e5e7eb", borderRadius: 14, padding: 16 }}>
+                        <p style={{ fontSize: 13, fontWeight: 700, color: "#1a2e1a", marginBottom: 12, fontFamily: "'Syne', sans-serif" }}>Top fournisseurs (refus)</p>
+                        {topFourn.map(([nom, s]) => (
+                          <div key={nom} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid #f3f4f6" }}>
+                            <span style={{ fontSize: 13, color: "#374151", fontWeight: 600 }}>{nom}</span>
+                            <div style={{ display: "flex", gap: 8 }}>
+                              <span style={{ fontSize: 12, background: "#fef2f2", color: "#dc2626", border: "1px solid #fca5a5", borderRadius: 6, padding: "2px 8px" }}>❌ {s.refus}</span>
+                              <span style={{ fontSize: 12, background: "#f3f4f6", color: "#6b7280", borderRadius: 6, padding: "2px 8px" }}>{s.total} total</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Top produits */}
+                    {topProd.length > 0 && (
+                      <div style={{ background: "#fff", border: "1.5px solid #e5e7eb", borderRadius: 14, padding: 16 }}>
+                        <p style={{ fontSize: 13, fontWeight: 700, color: "#1a2e1a", marginBottom: 12, fontFamily: "'Syne', sans-serif" }}>Top produits (refus)</p>
+                        {topProd.map(([nom, s]) => (
+                          <div key={nom} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid #f3f4f6" }}>
+                            <span style={{ fontSize: 13, color: "#374151", fontWeight: 600 }}>{nom}</span>
+                            <div style={{ display: "flex", gap: 8 }}>
+                              <span style={{ fontSize: 12, background: "#fef2f2", color: "#dc2626", border: "1px solid #fca5a5", borderRadius: 6, padding: "2px 8px" }}>❌ {s.refus}</span>
+                              <span style={{ fontSize: 12, background: "#f3f4f6", color: "#6b7280", borderRadius: 6, padding: "2px 8px" }}>{s.total} total</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              }
 
               if (filtered.length === 0) return (
                 <div style={{ textAlign: "center", marginTop: 60, color: "#9ca3af" }}>
@@ -1876,19 +2130,24 @@ _PDF joint_`;
                 </div>
               );
 
-              return filtered.map((r, i) => (
+              return sorted.map((r, i) => (
               <div key={r.firebaseKey || r.id} className="card fade-up" style={{ padding: "1rem 1.25rem", marginBottom: 12, animationDelay: `${i * 0.04}s`, borderLeft: `4px solid ${r.decision === "stock" ? "#22c55e" : r.decision === "reserve" ? "#f59e0b" : "#ef4444"}` }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
                   <div>
                     <p style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 16, color: "#1a2e1a", marginBottom: 3 }}>{r.produit}</p>
                     {r.numeroRapport && <p style={{ fontSize: 11, color: "#c8a84b", fontWeight: 700, marginBottom: 2, letterSpacing: "0.5px" }}>#{r.numeroRapport}</p>}
-                    <p style={{ fontSize: 13, color: "#6b7280", marginBottom: 2 }}>{r.fournisseur}{r.origine ? ` · ${r.origine}` : ""}{r.conditionnement ? ` · ${r.conditionnement}` : ""}{r.poids ? ` · ${r.poids}` : ""}</p>
+                    <p style={{ fontSize: 13, color: "#6b7280", marginBottom: 2 }}>{r.fournisseur}{r.origine ? ` · ${r.origine}` : ""}{r.calibre ? ` · ${r.calibre}` : ""}{r.conditionnement ? ` · ${r.conditionnement}` : ""}{r.poids ? ` · ${r.poids}` : ""}</p>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 4 }}>
                       {r.lotMoorea && <span style={{ fontSize: 11, background: "#faf8f0", color: "#8a6f2e", border: "1px solid #e0d0a0", borderRadius: 6, padding: "2px 8px", fontWeight: 600 }}>Lot Moorea: {r.lotMoorea}</span>}
                       {r.lotFournisseur && <span style={{ fontSize: 11, background: "#f5f5f5", color: "#6b7280", border: "1px solid #e5e7eb", borderRadius: 6, padding: "2px 8px" }}>Lot Fourn.: {r.lotFournisseur}</span>}
                       {r.temperature && <span style={{ fontSize: 11, background: "#eff6ff", color: "#1d4ed8", border: "1px solid #bfdbfe", borderRadius: 6, padding: "2px 8px", fontWeight: 600 }}>🌡 {r.temperature}°C</span>}
                     </div>
                     <p style={{ fontSize: 11, color: "#9ca3af" }}>{r.date} à {r.heure}</p>
+                    {r.bonRepriseSigné && r.transporteur && (
+                      <div style={{ marginTop: 4, background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 8, padding: "5px 10px", fontSize: 11, color: "#dc2626" }}>
+                        🔄 Bon signé · {r.transporteur.nom} {r.transporteur.prenom} · {r.transporteur.immatriculation} · {r.transporteur.signéLe}
+                      </div>
+                    )}
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
                     <span className="pill" style={{
@@ -1953,10 +2212,34 @@ _PDF joint_`;
                   <button onClick={() => envoyerEmail(r)} disabled={sendingId === (r.id || r.firebaseKey)} style={{ flex: 1, padding: "13px 0", borderRadius: 12, border: "none", background: sendingId === (r.id || r.firebaseKey) ? "#d1d5db" : "linear-gradient(135deg, #c8a84b, #a8882b)", cursor: sendingId === (r.id || r.firebaseKey) ? "not-allowed" : "pointer", fontSize: 14, fontWeight: 700, color: "#fff", fontFamily: "'Syne', sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, touchAction: "manipulation" }}>
                     {sendingId === (r.id || r.firebaseKey) ? "⏳…" : "✉ Mail commercial"}
                   </button>
-                  {r.decision !== "stock" && r.decision && (
-                    <button onClick={() => genererBonRetour(r)} style={{ padding: "13px 14px", borderRadius: 12, border: "1.5px solid #fca5a5", background: "#fef2f2", cursor: "pointer", fontSize: 13, fontWeight: 700, color: "#dc2626", fontFamily: "'Syne', sans-serif", touchAction: "manipulation", whiteSpace: "nowrap" }}>
-                      🔄 Bon retour
-                    </button>
+                  {r.decision === "refus" && (
+                    r.bonRepriseSigné
+                      ? <button onClick={() => {
+                          setSigNom(r.transporteur?.nom || "");
+                          setSigPrenom(r.transporteur?.prenom || "");
+                          setSigImat(r.transporteur?.immatriculation || "");
+                          setSignatureModal(r);
+                          setTimeout(() => {
+                            const canvas = signatureCanvasRef.current;
+                            if (canvas) {
+                              const ctx = canvas.getContext("2d");
+                              if (ctx) {
+                                ctx.fillStyle = "#fff";
+                                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                                if (r.transporteur?.signatureBase64) {
+                                  const img = new Image();
+                                  img.onload = () => ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                                  img.src = r.transporteur.signatureBase64;
+                                }
+                              }
+                            }
+                          }, 100);
+                        }} style={{ padding: "13px 14px", borderRadius: 12, border: "1.5px solid #16a34a", background: "#f0fdf4", cursor: "pointer", fontSize: 11, fontWeight: 700, color: "#16a34a", fontFamily: "'Syne', sans-serif", touchAction: "manipulation", whiteSpace: "nowrap" }}>
+                          ✅ BL SIGNÉ PAR {r.transporteur?.nom?.toUpperCase() || "LE TRANSPORTEUR"}
+                        </button>
+                      : <button onClick={() => genererBonRetour(r)} style={{ padding: "13px 14px", borderRadius: 12, border: "1.5px solid #fca5a5", background: "#fef2f2", cursor: "pointer", fontSize: 13, fontWeight: 700, color: "#dc2626", fontFamily: "'Syne', sans-serif", touchAction: "manipulation", whiteSpace: "nowrap" }}>
+                          🔄 Bon retour
+                        </button>
                   )}
                   <button onClick={() => chargerRapportEdition(r)} style={{ padding: "13px 14px", borderRadius: 12, border: "1.5px solid #bfdbfe", background: "#eff6ff", cursor: "pointer", fontSize: 16, touchAction: "manipulation" }}>
                     ✏️
