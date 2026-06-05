@@ -758,7 +758,7 @@ _PDF joint_`;
           return `<span style="display:inline-block;margin:3px;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;background:${ok ? "#f0fdf4" : "#fef2f2"};color:${ok ? "#16a34a" : "#dc2626"};border:1px solid ${ok ? "#bbf7d0" : "#fca5a5"};">${ok ? "✓" : "✕"} ${item.label}</span>`
         }).join("");
 
-    const poidsHTML = r.poidsStatut === "ok"
+    const poidsHTML = (!r.poidsStatut || r.poidsStatut === "ok")
       ? `<span style="background:#f0fdf4;color:#16a34a;padding:5px 14px;border-radius:20px;font-size:13px;font-weight:600;border:1px solid #bbf7d0;">✓ Poids OK</span>`
       : r.poidsStatut === "ecart"
       ? `<span style="background:#fffbeb;color:#d97706;padding:5px 14px;border-radius:20px;font-size:13px;font-weight:600;border:1px solid #fcd34d;">⚠ Écart${r.poidsEcart ? " : " + r.poidsEcart : ""}</span>`
@@ -1086,12 +1086,12 @@ _PDF joint_`;
       doc.setFillColor(...scoreColor2);
       doc.roundedRect(M+2, y-2, 100, 9, 2, 2, "F");
       doc.setTextColor(255,255,255); doc.setFont("helvetica","bold"); doc.setFontSize(9);
-      doc.text(`Score moyen : ${r.score}/5 - Suggestion : ${suggestion}`, M+6, y+4.5);
+      doc.text(`Score moyen : ${r.score}/5 - ${suggestion}`, M+6, y+4.5);
       y += 14;
     }
 
     section("POIDS");
-    if (r.poidsStatut==="ok") {
+    if (!r.poidsStatut || r.poidsStatut === "ok") {
       doc.setFillColor(240,253,244); doc.roundedRect(M+2,y-2,50,9,2,2,"F");
       doc.setTextColor(22,163,74); doc.setFont("helvetica","bold"); doc.setFontSize(9);
       doc.text("Poids OK",M+6,y+4.5);
@@ -1754,7 +1754,7 @@ _PDF joint_`;
                     <span style={{ fontSize: 18 }}>{parseFloat(score) >= 4 ? "✅" : parseFloat(score) >= 3 ? "⚠️" : "❌"}</span>
                     <div>
                       <p style={{ fontSize: 13, fontWeight: 700, color: parseFloat(score) >= 4 ? "#15803d" : parseFloat(score) >= 3 ? "#92400e" : "#991b1b" }}>
-                        {parseFloat(score) >= 4 ? "Suggestion : Conforme" : parseFloat(score) >= 3 ? "Suggestion : Réserve" : "Suggestion : Non conforme"}
+                        {parseFloat(score) >= 4 ? "Conforme" : parseFloat(score) >= 3 ? "Réserve" : "Non conforme"}
                       </p>
                       <p style={{ fontSize: 11, color: "#6b7280" }}>L'agréeur décide en dernier</p>
                     </div>
