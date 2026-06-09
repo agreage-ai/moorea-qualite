@@ -730,16 +730,20 @@ _PDF joint_`;
       section("📷 Photos");
       const imgW = (CW - 8) / 3;
       const imgH = imgW * 0.75;
-      for (let i = 0; i < r.photos.length; i++) {
-        const col = i % 3; const rowI = Math.floor(i / 3);
-        if (rowI > 0 && col === 0) checkY(imgH + 4);
-        const px = M + col * (imgW + 4);
-        const py = y + rowI * (imgH + 4);
-        try {
-          doc.addImage(r.photos[i].url, "JPEG", px, py, imgW, imgH, undefined, "FAST");
-        } catch {}
+      const totalRows = Math.ceil(r.photos.length / 3);
+      for (let rowI = 0; rowI < totalRows; rowI++) {
+        checkY(imgH + 4);
+        for (let col = 0; col < 3; col++) {
+          const i = rowI * 3 + col;
+          if (i >= r.photos.length) break;
+          const px = M + col * (imgW + 4);
+          try {
+            doc.addImage(r.photos[i].url, "JPEG", px, y, imgW, imgH, undefined, "FAST");
+          } catch {}
+        }
+        y += imgH + 4;
       }
-      y += Math.ceil(r.photos.length / 3) * (imgH + 4) + 8;
+      y += 4;
     }
 
     doc.setFillColor(10, 10, 10);
@@ -1189,13 +1193,18 @@ _PDF joint_`;
       checkY(60); section("PHOTOS");
       const imgW=(CW-8)/3;
       const imgH=imgW*0.75;
-      for (let i=0;i<allPhotos.length;i++) {
-        const col=i%3; const rowI=Math.floor(i/3);
-        if (rowI>0&&col===0) checkY(imgH+4);
-        const px=M+col*(imgW+4); const py=y+rowI*(imgH+4);
-        try { doc.addImage(allPhotos[i].url,"JPEG",px,py,imgW,imgH,"photo"+i,"MEDIUM"); } catch {}
+      const totalRows2 = Math.ceil(allPhotos.length / 3);
+      for (let rowI = 0; rowI < totalRows2; rowI++) {
+        checkY(imgH + 4);
+        for (let col = 0; col < 3; col++) {
+          const i = rowI * 3 + col;
+          if (i >= allPhotos.length) break;
+          const px = M + col * (imgW + 4);
+          try { doc.addImage(allPhotos[i].url, "JPEG", px, y, imgW, imgH, "photo"+i, "MEDIUM"); } catch {}
+        }
+        y += imgH + 4;
       }
-      y+=Math.ceil(allPhotos.length/3)*(imgH+4)+8;
+      y += 4;
     }
 
     doc.setFillColor(10,10,10); doc.rect(0,285,W,12,"F");
