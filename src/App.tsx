@@ -662,7 +662,7 @@ _PDF joint_`;
       doc.setTextColor(22, 163, 74);
       doc.setFont("helvetica", "bold");
       doc.setFontSize(9);
-      doc.text("✓ Poids OK", M + 6, y + 4.5);
+      doc.text("Poids OK", M + 6, y + 4.5);
     } else if (r.poidsStatut === "ecart") {
       doc.setFillColor(255, 251, 235);
       doc.roundedRect(M + 2, y - 2, 80, 9, 2, 2, "F");
@@ -680,7 +680,7 @@ _PDF joint_`;
       doc.setTextColor(220, 38, 38);
       doc.setFont("helvetica", "bold");
       doc.setFontSize(9);
-      doc.text("✕ Étiquette absente", M + 6, y + 4.5);
+      doc.text("Etiquette absente", M + 6, y + 4.5);
       y += 12;
     } else {
       const cols = 3; const itemW = CW / cols;
@@ -694,7 +694,7 @@ _PDF joint_`;
         doc.setTextColor(ok ? 22 : 220, ok ? 163 : 38, ok ? 74 : 38);
         doc.setFont("helvetica", ok ? "normal" : "bold");
         doc.setFontSize(7.5);
-        doc.text(`${ok ? "✓" : "✕"} ${item.label}`, ix + 3, iy + 4);
+        doc.text(`${ok ? "OK" : "NC"} ${item.label}`, ix + 3, iy + 4);
       });
       y += Math.ceil(ETIQUETTE_ITEMS.length / cols) * 8 + 6;
     }
@@ -1173,10 +1173,10 @@ _PDF joint_`;
         const val = r.controles[item.id];
         if (val === "C") {
           doc.setTextColor(22, 163, 74); doc.setFont("helvetica", "bold");
-          doc.text("✓", M + colW2 * 1.5, y + 4.5, { align: "center" });
+          doc.text("C", M + colW2 * 1.5, y + 4.5, { align: "center" });
         } else if (val === "NC") {
           doc.setTextColor(220, 38, 38); doc.setFont("helvetica", "bold");
-          doc.text("✕", M + colW2 * 2.5, y + 4.5, { align: "center" });
+          doc.text("NC", M + colW2 * 2.5, y + 4.5, { align: "center" });
         }
         y += 8;
       });
