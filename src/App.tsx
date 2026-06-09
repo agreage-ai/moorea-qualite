@@ -730,7 +730,7 @@ _PDF joint_`;
       section("📷 Photos");
       const imgW = (CW - 8) / 3;
       const imgH = imgW * 0.75;
-      for (let i = 0; i < Math.min(r.photos.length, 6); i++) {
+      for (let i = 0; i < r.photos.length; i++) {
         const col = i % 3; const rowI = Math.floor(i / 3);
         if (rowI > 0 && col === 0) checkY(imgH + 4);
         const px = M + col * (imgW + 4);
@@ -739,7 +739,7 @@ _PDF joint_`;
           doc.addImage(r.photos[i].url, "JPEG", px, py, imgW, imgH, undefined, "FAST");
         } catch {}
       }
-      y += Math.ceil(Math.min(r.photos.length, 6) / 3) * (imgH + 4) + 8;
+      y += Math.ceil(r.photos.length / 3) * (imgH + 4) + 8;
     }
 
     doc.setFillColor(10, 10, 10);
@@ -798,12 +798,11 @@ _PDF joint_`;
       ? `<div style="padding:8px 28px 16px;">
           <div style="font-size:11px;color:#8a6f2e;font-weight:700;text-transform:uppercase;letter-spacing:1px;padding:10px 0 8px;border-top:1px solid #f0ede6;">📷 Photos</div>
           <table width="100%" cellpadding="4" cellspacing="0">
-            <tr>${imgUrls.slice(0, 3).map((url: string) =>
-              `<td style="width:33%;vertical-align:top;"><img src="${url}" style="width:100%;border-radius:8px;display:block;" /></td>`
-            ).join("")}</tr>
-            ${imgUrls.length > 3 ? `<tr>${imgUrls.slice(3, 6).map((url: string) =>
-              `<td style="width:33%;vertical-align:top;"><img src="${url}" style="width:100%;border-radius:8px;display:block;" /></td>`
-            ).join("")}</tr>` : ""}
+            ${Array.from({ length: Math.ceil(imgUrls.length / 3) }, (_, rowI) =>
+              `<tr>${imgUrls.slice(rowI * 3, rowI * 3 + 3).map((url: string) =>
+                `<td style="width:33%;vertical-align:top;"><img src="${url}" style="width:100%;border-radius:8px;display:block;" /></td>`
+              ).join("")}</tr>`
+            ).join("")}
           </table>
         </div>`
       : r.nbPhotos > 0
@@ -1190,13 +1189,13 @@ _PDF joint_`;
       checkY(60); section("PHOTOS");
       const imgW=(CW-8)/3;
       const imgH=imgW*0.75;
-      for (let i=0;i<Math.min(allPhotos.length,6);i++) {
+      for (let i=0;i<allPhotos.length;i++) {
         const col=i%3; const rowI=Math.floor(i/3);
         if (rowI>0&&col===0) checkY(imgH+4);
         const px=M+col*(imgW+4); const py=y+rowI*(imgH+4);
         try { doc.addImage(allPhotos[i].url,"JPEG",px,py,imgW,imgH,"photo"+i,"MEDIUM"); } catch {}
       }
-      y+=Math.ceil(Math.min(allPhotos.length,6)/3)*(imgH+4)+8;
+      y+=Math.ceil(allPhotos.length/3)*(imgH+4)+8;
     }
 
     doc.setFillColor(10,10,10); doc.rect(0,285,W,12,"F");
