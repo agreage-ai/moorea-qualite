@@ -537,7 +537,6 @@ export default function App() {
   };
 
   const ouvrirRapportDepuisArrivage = (arrivage: any, avecLitige = false) => {
-    // Pré-remplir le formulaire qualité avec les données de l'arrivage
     setFournisseur(arrivage.fournisseur || "");
     setProduit(arrivage.produit || "");
     setOrigine(arrivage.origine || "");
@@ -550,7 +549,11 @@ export default function App() {
     if (avecLitige) {
       setConformite("non_conforme");
       setDecision("refus");
+    } else {
+      setConformite("");
+      setDecision("");
     }
+    setPageMode("__form__" as any); // couper toutes les vues arrivages
     setVue("form");
     window.scrollTo(0, 0);
   };
@@ -1859,17 +1862,15 @@ _PDF joint_`;
           <div style={{ display: "flex", gap: 4, background: "rgba(255,255,255,0.06)", padding: 4, borderRadius: 12, flexShrink: 0, flexWrap: "wrap" }}>
             {[
               ["arrivages_tab", "📋 Arrivages"],
-              ["form", "✦ Rapport"],
               ["historique", "Rapports"],
               ["stock_refus_tab", `🔴 Stock Refus${arrivages.filter(a => a.statut === "refusé" && !a.recupere && !a.destruction?.recupere).length > 0 ? ` (${arrivages.filter(a => a.statut === "refusé" && !a.recupere && !a.destruction?.recupere).length})` : ""}`],
             ].map(([v, label]) => {
-              const isActive = (v === "arrivages_tab" && (pageMode === "arrivages" || pageMode === "saisie_arr" || pageMode === "historique_arr" || pageMode === "stats_arr") && vue !== "form" && vue !== "historique" && vue !== "stock_refus") || (v === "form" && vue === "form") || (v === "historique" && vue === "historique") || (v === "stock_refus_tab" && vue === "stock_refus");
+              const isActive = (v === "arrivages_tab" && (pageMode === "arrivages" || pageMode === "saisie_arr" || pageMode === "historique_arr" || pageMode === "stats_arr") && vue !== "form" && vue !== "historique" && vue !== "stock_refus") || (v === "historique" && vue === "historique") || (v === "stock_refus_tab" && vue === "stock_refus");
               return (
                 <button key={v} onClick={() => {
                   if (v === "arrivages_tab") { setPageMode("arrivages"); setVue("__none__" as any); }
                   else if (v === "historique") { setVue("historique"); setPageMode("arrivages"); }
                   else if (v === "stock_refus_tab") { setVue("stock_refus" as any); setPageMode("arrivages"); }
-                  else { setVue("form"); setPageMode("arrivages"); }
                 }} style={{ padding: "9px 14px", borderRadius: 9, cursor: "pointer", fontSize: 13, fontWeight: isActive ? 700 : 400, fontFamily: "'Syne', sans-serif", background: isActive ? (v === "stock_refus_tab" ? "#dc2626" : "#c8a84b") : "transparent", color: isActive ? "#fff" : "rgba(255,255,255,0.6)", border: "none", transition: "all 0.2s", touchAction: "manipulation", whiteSpace: "nowrap" }}>{label}</button>
               );
             })}
@@ -2331,6 +2332,26 @@ _PDF joint_`;
         {/* FORMULAIRE */}
         {vue === "form" && (
           <div className="fade-up">
+
+            {/* BANDEAU ARRIVAGE LIÉ */}
+            {rapportArrivage && (
+              <div style={{ marginBottom: 16, background: rapportArrivage.litige ? "#fef2f2" : "#f0fdf4", border: `2px solid ${rapportArrivage.litige ? "#fca5a5" : "#bbf7d0"}`, borderRadius: 16, padding: "12px 18px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div>
+                  <p style={{ margin: "0 0 3px", fontSize: 11, fontWeight: 700, color: rapportArrivage.litige ? "#991b1b" : "#15803d", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                    {rapportArrivage.litige ? "⚠️ Rapport de litige" : "📋 Rapport d'agrément"}
+                  </p>
+                  <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "#1a2e1a" }}>{rapportArrivage.produit} · {rapportArrivage.fournisseur}</p>
+                  <p style={{ margin: "2px 0 0", fontSize: 12, color: "#6b7280" }}>
+                    {rapportArrivage.lot_interne && <span style={{ fontWeight: 700, color: "#8a6f2e" }}>🔖 Lot Moorea: {rapportArrivage.lot_interne}</span>}
+                    {rapportArrivage.lot_interne && " · "}Arrivage du {rapportArrivage.date}
+                  </p>
+                </div>
+                <button onClick={() => { reset(); setRapportArrivage(null); setPageMode("historique_arr"); setVue("__none__" as any); window.scrollTo(0,0); }}
+                  style={{ padding: "8px 14px", borderRadius: 10, border: "1.5px solid #e5e7eb", background: "#fff", cursor: "pointer", fontSize: 13, color: "#6b7280", fontWeight: 600, whiteSpace: "nowrap" }}>
+                  ← Retour
+                </button>
+              </div>
+            )}
 
             {/* AGREEUR */}
             <div style={{ marginBottom: 16, background: "#0a0a0a", border: "2px solid #c8a84b", borderRadius: 20, padding: "16px 24px", display: "flex", alignItems: "center", gap: 16 }}>
