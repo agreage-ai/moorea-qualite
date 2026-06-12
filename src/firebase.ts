@@ -1,7 +1,6 @@
 import { initializeApp } from "firebase/app";
-import { getDatabase, ref, push, onValue, remove } from "firebase/database";
+import { getDatabase, ref, push, onValue, remove, update } from "firebase/database";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
-
 const firebaseConfig = {
   apiKey: "AIzaSyCnWg6Y2THauxyM4yk_QqhOcyybU0-WRI4",
   authDomain: "moorea-qualite.firebaseapp.com",
@@ -11,9 +10,8 @@ const firebaseConfig = {
   appId: "1:780115511682:web:027c3f58f2554b2bc6279b",
   databaseURL: "https://moorea-qualite-default-rtdb.europe-west1.firebasedatabase.app"
 };
-
 const app = initializeApp(firebaseConfig);
 export const db = getDatabase(app);
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
-export { ref, push, onValue, remove, signInWithPopup, signOut, onAuthStateChanged };
+export { ref, push, onValue, remove, update, signInWithPopup, signOut, onAuthStateChanged };
