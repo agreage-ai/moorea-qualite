@@ -501,94 +501,94 @@ export default function App() {
           const lib = await loadPDF();
           const pdf = await lib.getDocument({ data: evt.target!.result }).promise;
 
-          // Extrait tous les items avec position
-          const allItems: { str: string; x: number; y: number; page: number }[] = [];
+          // Extrait tous les items avec position Y (page*10000 + y pour trier globalement)
+          const allItems: { str: string; x: number; y: number; globalY: number }[] = [];
           for (let p = 1; p <= pdf.numPages; p++) {
             const pg = await pdf.getPage(p);
             const tc = await pg.getTextContent();
             tc.items.forEach((i: any) => {
-              const s = i.str?.trim();
-              if (s) allItems.push({ str: s, x: Math.round(i.transform[4]), y: Math.round(i.transform[5]), page: p });
+              const s = (i.str || "").trim();
+              if (s) allItems.push({
+                str: s,
+                x: Math.round(i.transform[4]),
+                y: Math.round(i.transform[5]),
+                globalY: (pdf.numPages - p) * 100000 + Math.round(i.transform[5]) // inverse car Y va du bas vers le haut
+              });
             });
           }
 
-          // Regroupe par ligne (même page + Y ± 3px)
-          const lineMap: Map<string, { str: string; x: number }[]> = new Map();
+          // Regroupe par ligne (même globalY ± 4px), triées par X
+          const lineMap = new Map<number, { str: string; x: number }[]>();
           allItems.forEach(item => {
-            const key = `${item.page}_${Math.round(item.y / 3) * 3}`;
+            const key = Math.round(item.globalY / 4) * 4;
             if (!lineMap.has(key)) lineMap.set(key, []);
             lineMap.get(key)!.push({ str: item.str, x: item.x });
           });
 
-          // Trie chaque ligne par X et construit le texte
+          // Trie les lignes (de haut en bas = globalY décroissant) et les tokens par X
           const lines: string[] = [];
-          lineMap.forEach(items => {
-            items.sort((a, b) => a.x - b.x);
-            lines.push(items.map(i => i.str).join(" "));
-          });
+          [...lineMap.entries()]
+            .sort((a, b) => b[0] - a[0])
+            .forEach(([, tokens]) => {
+              tokens.sort((a, b) => a.x - b.x);
+              lines.push(tokens.map(t => t.str).join(" "));
+            });
 
           const arr: any[] = [];
           let curLot = "", curFourn = "", curDate = now2.toLocaleDateString("fr-FR");
+          let pendingLibelle = ""; // libellé en attente d'être associé à un SL
 
           for (const line of lines) {
-            // === LIGNE LOT ===
-            // "Lot 26064412 Fournisseur 1473 GREENYARD FRESH Date arrivée 11/06/2026"
+            // === LIGNE LOT/FOURNISSEUR ===
             const lotM = line.match(/Lot\s+(\d{7,})\s+Fournisseur\s+\d+\s+(.+?)\s+Date\s+arriv[eé]e\s+(\d{2}\/\d{2}\/\d{4})/i);
             if (lotM) {
               curLot = lotM[1];
               curFourn = lotM[2].replace(/\s+/g, " ").trim().toUpperCase();
               const [dd, mm, yyyy] = lotM[3].split("/");
               curDate = new Date(+yyyy, +mm - 1, +dd).toLocaleDateString("fr-FR");
+              pendingLibelle = "";
               continue;
             }
 
-            // === LIGNE ARTICLE ===
-            // "01 PATATE003 6 PATATE DOUCE EGYPTE CAL.L 1 CARTON 6 KG CAT 1 540 3240,00 ..."
-            // "02 VS800 CHAMPIGNON ERINGY (VRAC 4 KG) 20 80,00 ..."
-            // Le nb de colis est le premier entier APRÈS le code article et le libellé
-            // Structure : SL(2ch) | code(optionnel) | libellé multiligne | nb_colis | poids...
-            const slM = line.match(/^(\d{2})\s+/);
-            if (slM && parseInt(slM[1]) >= 1 && curFourn) {
-              const rest = line.slice(slM[0].length);
-              // Retire le code article (1er token tout en majuscules/chiffres sans espace, ≤15 chars)
-              const codeM = rest.match(/^([A-Z0-9]{3,15})\s+/);
-              const afterCode = codeM ? rest.slice(codeM[0].length) : rest;
+            // Ignore les lignes d'en-tête et totaux
+            if (/^(SL|Article|Libelle|Rec\.|Nb colis|Totaux|Total|PAGE|DATE|MOOREA COMMERCE|JOURNAL|Pour le|Acheteur)/i.test(line)) {
+              continue;
+            }
 
-              // Le libellé s'arrête au premier grand nombre entier (nb colis)
-              // On cherche un entier ≥ 1 précédé d'un espace, suivi d'un espace puis d'un nombre décimal
-              // Exemple: "PATATE DOUCE EGYPTE CAL.L 1 CARTON 6 KG CAT 1 540 3240,00"
-              // Le nb colis = 540
-              // On prend le dernier groupe de chiffres entiers avant les décimaux (,)
-              const nums = [...afterCode.matchAll(/\b(\d+)\b(?!\s*[\d,])/g)];
-              // En fait cherchons plus simplement : tous les entiers dans la ligne
-              const allNums = [...afterCode.matchAll(/\b(\d+)\b/g)].map(m => ({ val: parseInt(m[1]), idx: m.index! }));
-              
-              // Le nb de colis est typiquement le plus grand entier "isolé" avant les décimaux
-              // Stratégie : on prend l'entier qui précède directement un nombre décimal (x,xx)
+            // === LIGNE ARTICLE avec SL ===
+            // Pattern : SL (01-99) suivi de nb_colis suivi d'un décimal
+            // Ex: "01 540 3240,00" ou "02 VS800 CHAMPIGNON ERINGY 20 80,00"
+            const slM = line.match(/^(\d{2})\s+(.+)/);
+            if (slM && parseInt(slM[1]) >= 1 && parseInt(slM[1]) <= 99 && curFourn) {
+              const rest = slM[2];
+
+              // Cherche nb_colis : premier entier suivi d'un espace puis d'un décimal (x,xx)
+              const colisM = rest.match(/(?:^|\s)(\d{1,4})\s+(?:\d+\s+)?(\d+[,\.]\d+)/);
               let nbColis = 0;
-              let libelleEnd = afterCode.length;
-              
-              const decimalMatch = afterCode.match(/(\d+)\s+(\d+[,\.]\d+)/);
-              if (decimalMatch) {
-                nbColis = parseInt(decimalMatch[1]);
-                libelleEnd = afterCode.indexOf(decimalMatch[0]);
-              } else {
-                // Fallback : dernier entier de la ligne
-                const lastNum = allNums[allNums.length - 1];
-                if (lastNum) { nbColis = lastNum.val; libelleEnd = lastNum.idx; }
+              let libelleFromLine = "";
+
+              if (colisM) {
+                nbColis = parseInt(colisM[1]);
+                // Le libellé est tout ce qui précède le nb_colis dans cette ligne
+                const colisIdx = rest.indexOf(colisM[0]);
+                libelleFromLine = rest.slice(0, colisIdx).trim();
+                // Retire le code article en début si présent
+                libelleFromLine = libelleFromLine.replace(/^[A-Z0-9]{3,15}\s*/, "").trim();
               }
 
-              const libelle = afterCode.slice(0, libelleEnd).replace(/\s+/g, " ").trim();
-              // Nettoie le libellé : retire les codes article répétés au début
-              const libellePropre = libelle.replace(/^[A-Z0-9]{3,15}\s+/, "").trim();
+              // Détermine le libellé final : 
+              // Si pendingLibelle existe → l'utiliser (libellé sur ligne précédente)
+              // Sinon utiliser ce qu'on a extrait de cette ligne
+              let libelleFinal = pendingLibelle || libelleFromLine;
+              libelleFinal = libelleFinal.replace(/\s+/g, " ").trim();
 
-              // Extrait l'origine depuis le libellé
-              const origineM = libellePropre.match(/\b(FRANCE|ESPAGNE|MAROC|KENYA|COLOMBIE|BRESIL|EGYPTE|PEROU|ISRAEL|PAYS.BAS|ITALIE|ALLEMAGNE|BELGIQUE|GHANA|SENEGAL|HONDURAS|CHINE|HOLLANDE|THAÏLANDE|INDE)\b/i);
+              // Extrait l'origine
+              const origineM = libelleFinal.match(/\b(FRANCE|ESPAGNE|MAROC|KENYA|COLOMBIE|BRESIL|EGYPTE|PEROU|ISRAEL|PAYS.BAS|ITALIE|ALLEMAGNE|BELGIQUE|GHANA|SENEGAL|HONDURAS|CHINE|HOLLANDE|THAÏLANDE|INDE|THAI)\b/i);
 
-              if (nbColis > 0 && libellePropre.length > 3) {
+              if (nbColis > 0 && libelleFinal.length > 2) {
                 arr.push({
                   fournisseur: curFourn,
-                  produit: libellePropre,
+                  produit: libelleFinal,
                   lot_interne: curLot,
                   lot_fournisseur: "",
                   quantite: nbColis,
@@ -599,12 +599,35 @@ export default function App() {
                   timestamp: Date.now(),
                 });
               }
+              pendingLibelle = ""; // reset après utilisation
+              continue;
+            }
+
+            // === LIGNE LIBELLÉ SEUL (sans SL) ===
+            // Ex: "PATATE DOUCE EGYPTE CAL.L 1 CARTON 6 KG CAT 1"
+            // Ex: "HARICOT VERT KENYA (BARQUETTE 350G X 8)"
+            // C'est une ligne qui contient du texte descriptif sans numéro SL
+            // On la mémorise comme libellé en attente
+            if (curFourn && line.length > 5 && !/^\d+[,\.]\d+/.test(line)) {
+              // Retire les codes article purs (ex: "PATATE0036", "HARICO0031")
+              const cleaned = line.replace(/^[A-Z]{2,}[0-9]{3,}\s*/, "").trim();
+              if (cleaned.length > 3 && /[A-Z]{3,}/.test(cleaned)) {
+                pendingLibelle = (pendingLibelle ? pendingLibelle + " " : "") + cleaned;
+              }
             }
           }
 
-          if (!arr.length) { showToast("Aucun arrivage détecté dans le PDF", "error"); setImportingArr(false); return; }
+          if (!arr.length) {
+            showToast("Aucun arrivage détecté — vérifie la console", "error");
+            console.log("Lines parsed:", lines.slice(0, 50));
+            setImportingArr(false); return;
+          }
           setPreviewArr(arr); setImportingArr(false);
-        } catch (e) { console.error("PDF parse error:", e); showToast("Erreur PDF — vérifie la console", "error"); setImportingArr(false); }
+        } catch (e) {
+          console.error("PDF parse error:", e);
+          showToast("Erreur PDF", "error");
+          setImportingArr(false);
+        }
       };
       reader.readAsArrayBuffer(file);
     } else {
