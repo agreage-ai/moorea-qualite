@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import jsPDF from "jspdf";
 import emailjs from "@emailjs/browser";
-import { db, ref, push, onValue, remove, auth, googleProvider, signInWithPopup, signOut, onAuthStateChanged } from "./firebase";
+import { db, ref, push, onValue, update, remove, auth, googleProvider, signInWithPopup, signOut, onAuthStateChanged } from "./firebase";
 
 // ─── CONFIG EMAILJS ───
 const EMAILJS_SERVICE_ID = "service_xheyrpi";
@@ -180,6 +180,155 @@ function AutocompleteInput({ value, onChange, suggestions, placeholder, required
   );
 }
 
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SYSTÈME ARRIVAGES — composants ajoutés à moorea-qualite
+// ═══════════════════════════════════════════════════════════════════════════
+
+const NOTE_COLORS_ARR: Record<number, string> = { 1: "#dc2626", 2: "#f97316", 3: "#eab308", 4: "#22c55e", 5: "#15803d" };
+const NOTE_BG_ARR: Record<number, string> = { 1: "#fef2f2", 2: "#fff7ed", 3: "#fefce8", 4: "#f0fdf4", 5: "#dcfce7" };
+
+function BadgeArrivage({ status }: { status: string }) {
+  const map: Record<string, { bg: string; color: string; border: string; label: string }> = {
+    "en attente": { bg: "#fffbeb", color: "#d97706", border: "#fcd34d", label: "En attente" },
+    "validé": { bg: "#eafaf1", color: "#1a6b3a", border: "#d4edda", label: "Validé ✓" },
+    "refusé": { bg: "#fef2f2", color: "#dc2626", border: "#fca5a5", label: "Litige refus" },
+    "sous réserve": { bg: "#fffbeb", color: "#92400e", border: "#fcd34d", label: "Sous réserve" },
+  };
+  const s = map[status] || map["en attente"];
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, background: s.bg, color: s.color, border: `1px solid ${s.border}`, fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 20 }}>
+      {s.label}
+    </span>
+  );
+}
+
+function PillArr({ children }: { children: React.ReactNode }) {
+  return <span style={{ background: "#f4f7f5", border: "1px solid #d4edda", color: "#1a6b3a", fontSize: 11, fontWeight: 500, padding: "2px 8px", borderRadius: 20 }}>{children}</span>;
+}
+
+function StatCardArr({ label, value, color }: { label: string; value: string | number; color?: string }) {
+  return (
+    <div style={{ background: "#fff", borderRadius: 14, padding: "14px 16px", flex: 1, boxShadow: "0 2px 12px rgba(0,0,0,0.05)", borderTop: `3px solid ${color || "#e8e0d0"}` }}>
+      <p style={{ margin: "0 0 2px", fontSize: 11, color: "#6b7280", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.5px" }}>{label}</p>
+      <p style={{ margin: 0, fontSize: 26, fontWeight: 700, color: color || "#1a6b3a", letterSpacing: "-1px" }}>{value}</p>
+    </div>
+  );
+}
+
+function NoteBtnArr({ n, selected, onChange }: { n: number; selected: number; onChange: (n: number) => void }) {
+  const active = selected === n;
+  return (
+    <button onClick={() => onChange(n)} style={{ width: 36, height: 36, borderRadius: 9, cursor: "pointer", fontSize: 12, fontWeight: active ? 700 : 400, border: `1.5px solid ${active ? NOTE_COLORS_ARR[n] : "#e5e7eb"}`, background: active ? NOTE_BG_ARR[n] : "#fff", color: active ? NOTE_COLORS_ARR[n] : "#9ca3af", transition: "all 0.12s" }}>{n}</button>
+  );
+}
+
+function ProduitRow({ arrivage, onValidate, onDelete, onOuvreRapport }: { arrivage: any; onValidate: any; onDelete: any; onOuvreRapport: any }) {
+  const [qualite, setQualite] = useState(3);
+  const [tempOk, setTempOk] = useState(true);
+  const [poidsOk, setPoidsOk] = useState(true);
+  const [litige, setLitige] = useState(false);
+  const [raison, setRaison] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const handleValider = async () => {
+    setSaving(true);
+    const ctrl = { qualite, temperature: tempOk ? "ok" : "ko", poids_mesure: poidsOk ? "ok" : "ko", observations: "" };
+    await onValidate(arrivage, ctrl, litige ? "non_conforme" : "conforme", litige ? "sous réserve" : "", raison, "");
+    setSaving(false);
+  };
+
+  const statusColor = litige ? "#dc2626" : qualite >= 4 ? "#27ae60" : qualite === 3 ? "#d97706" : "#dc2626";
+
+  return (
+    <div style={{ background: "#fff", borderRadius: 12, padding: "12px 16px", marginBottom: 8, border: `1.5px solid ${litige ? "#fca5a5" : "#d4edda"}`, borderLeft: `4px solid ${statusColor}` }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+        <div>
+          <p style={{ margin: "0 0 4px", fontWeight: 700, fontSize: 13, color: "#1a2e1a" }}>{arrivage.produit}{arrivage.variete ? ` · ${arrivage.variete}` : ""}</p>
+          <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+            <PillArr>📦 {arrivage.quantite} {arrivage.unite}</PillArr>
+            {arrivage.lot_interne && <PillArr>🔖 {arrivage.lot_interne}</PillArr>}
+            {arrivage.origine && <PillArr>🌍 {arrivage.origine}</PillArr>}
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 6 }}>
+          <button onClick={() => onOuvreRapport(arrivage)} style={{ background: "#faf8f3", border: "1px solid #e8e0d0", color: "#c8a84b", borderRadius: 8, padding: "4px 10px", cursor: "pointer", fontSize: 11, fontWeight: 700, fontFamily: "'Syne', sans-serif" }}>📋 Rapport</button>
+          <button onClick={() => onDelete(arrivage.id)} style={{ background: "transparent", border: "1px solid #fca5a5", color: "#dc2626", borderRadius: 8, padding: "3px 7px", cursor: "pointer", fontSize: 11 }}>🗑</button>
+        </div>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "auto 1fr 1fr auto", gap: "0 12px", alignItems: "center", marginBottom: 8 }}>
+        <div>
+          <p style={{ margin: "0 0 4px", fontSize: 10, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.5px" }}>👁 Qualité</p>
+          <div style={{ display: "flex", gap: 4 }}>{[1,2,3,4,5].map(n => <NoteBtnArr key={n} n={n} selected={qualite} onChange={setQualite} />)}</div>
+        </div>
+        <div>
+          <p style={{ margin: "0 0 4px", fontSize: 10, fontWeight: 700, color: "#6b7280", textTransform: "uppercase" }}>🌡 Temp.</p>
+          <div style={{ display: "flex", gap: 5 }}>
+            {[{v:true,l:"✓ Ok",c:"#27ae60"},{v:false,l:"✗ Non",c:"#dc2626"}].map(o => (
+              <button key={String(o.v)} onClick={() => setTempOk(o.v)} style={{ padding: "5px 9px", borderRadius: 8, cursor: "pointer", fontSize: 12, fontWeight: tempOk===o.v ? 700 : 400, border: `1.5px solid ${tempOk===o.v ? o.c : "#e5e7eb"}`, background: tempOk===o.v ? o.c+"18" : "#fff", color: tempOk===o.v ? o.c : "#9ca3af" }}>{o.l}</button>
+            ))}
+          </div>
+        </div>
+        <div>
+          <p style={{ margin: "0 0 4px", fontSize: 10, fontWeight: 700, color: "#6b7280", textTransform: "uppercase" }}>⚖️ Poids</p>
+          <div style={{ display: "flex", gap: 5 }}>
+            {[{v:true,l:"✓ Ok",c:"#27ae60"},{v:false,l:"✗ Non",c:"#dc2626"}].map(o => (
+              <button key={String(o.v)} onClick={() => setPoidsOk(o.v)} style={{ padding: "5px 9px", borderRadius: 8, cursor: "pointer", fontSize: 12, fontWeight: poidsOk===o.v ? 700 : 400, border: `1.5px solid ${poidsOk===o.v ? o.c : "#e5e7eb"}`, background: poidsOk===o.v ? o.c+"18" : "#fff", color: poidsOk===o.v ? o.c : "#9ca3af" }}>{o.l}</button>
+            ))}
+          </div>
+        </div>
+        <div>
+          <p style={{ margin: "0 0 4px", fontSize: 10, fontWeight: 700, color: "#6b7280", textTransform: "uppercase" }}>⚠️ Litige</p>
+          <div style={{ display: "flex", gap: 5 }}>
+            {[{v:false,l:"✓ Non",c:"#27ae60"},{v:true,l:"✗ Oui",c:"#dc2626"}].map(o => (
+              <button key={String(o.v)} onClick={() => setLitige(o.v)} style={{ padding: "5px 9px", borderRadius: 8, cursor: "pointer", fontSize: 12, fontWeight: litige===o.v ? 700 : 400, border: `1.5px solid ${litige===o.v ? o.c : "#e5e7eb"}`, background: litige===o.v ? o.c+"18" : "#fff", color: litige===o.v ? o.c : "#9ca3af" }}>{o.l}</button>
+            ))}
+          </div>
+        </div>
+      </div>
+      {litige && <input value={raison} onChange={e => setRaison(e.target.value)} placeholder="Raison du litige..." style={{ width: "100%", padding: "9px 12px", border: "1.5px solid #fca5a5", borderRadius: 10, fontSize: 13, outline: "none", marginBottom: 8, boxSizing: "border-box" }} />}
+      <button onClick={handleValider} disabled={saving || (litige && !raison)} style={{ width: "100%", padding: "9px", borderRadius: 10, cursor: "pointer", fontWeight: 700, fontSize: 13, border: "none", background: saving ? "#ccc" : litige ? "#dc2626" : "#27ae60", color: "#fff", fontFamily: "'Syne', sans-serif" }}>
+        {saving ? "..." : litige ? "📋 Valider + litige →" : "✅ Valider →"}
+      </button>
+    </div>
+  );
+}
+
+function FournisseurBlock({ fournisseur, produits, onValidate, onDelete, onOuvreRapport }: any) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{ background: "#fff", borderRadius: 14, marginBottom: 10, overflow: "hidden", boxShadow: "0 2px 12px rgba(0,0,0,0.06)" }}>
+      <div onClick={() => setOpen(!open)} style={{ padding: "11px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", background: "#faf8f3", borderBottom: open ? "1px solid #e8e0d0" : "none" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span>🏭</span>
+          <span style={{ fontWeight: 700, fontSize: 14, color: "#1a2e1a", fontFamily: "'Syne', sans-serif" }}>{fournisseur}</span>
+          <span style={{ fontSize: 12, background: "#fffbeb", color: "#d97706", padding: "2px 8px", borderRadius: 20, fontWeight: 600 }}>{produits.length} article{produits.length > 1 ? "s" : ""}</span>
+        </div>
+        <span style={{ fontSize: 18, color: "#c8a84b", fontWeight: 700, transform: open ? "rotate(90deg)" : "none", transition: "transform 0.2s", display: "inline-block" }}>›</span>
+      </div>
+      {open && <div style={{ padding: "12px 14px" }}>{produits.map((a: any) => <ProduitRow key={a.id} arrivage={a} onValidate={onValidate} onDelete={onDelete} onOuvreRapport={onOuvreRapport} />)}</div>}
+    </div>
+  );
+}
+
+function DateBlock({ date, arrivages, onValidate, onDelete, onOuvreRapport }: any) {
+  const today = new Date().toLocaleDateString("fr-FR");
+  const [open, setOpen] = useState(date === today);
+  const byFournisseur: Record<string, any[]> = {};
+  arrivages.forEach((a: any) => { if (!byFournisseur[a.fournisseur]) byFournisseur[a.fournisseur] = []; byFournisseur[a.fournisseur].push(a); });
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div onClick={() => setOpen(!open)} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8, cursor: "pointer", userSelect: "none" }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.5px", fontFamily: "'Syne', sans-serif" }}>📅 {date}</span>
+        <span style={{ fontSize: 12, background: "#fffbeb", color: "#d97706", padding: "2px 8px", borderRadius: 20, fontWeight: 600 }}>{arrivages.length} en attente</span>
+        <span style={{ fontSize: 16, color: "#d97706", marginLeft: "auto", transform: open ? "rotate(90deg)" : "none", transition: "transform 0.2s", display: "inline-block" }}>›</span>
+      </div>
+      {open && Object.entries(byFournisseur).map(([f, p]) => <FournisseurBlock key={f} fournisseur={f} produits={p} onValidate={onValidate} onDelete={onDelete} onOuvreRapport={onOuvreRapport} />)}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 export default function App() {
   const [rapports, setRapports] = useState<any[]>([]);
   const [vue, setVue] = useState("form");
@@ -212,6 +361,18 @@ export default function App() {
     temperature: "C", fraicheur: "C", sanitaire: "C", maturite: "C", coloration: "C"
   });
   const [sendingId, setSendingId] = useState<string | null>(null);
+
+  // ─── STATES ARRIVAGES ───
+  const [pageMode, setPageMode] = useState<"qualite" | "arrivages" | "historique_arr" | "stats_arr" | "saisie_arr">("arrivages");
+  const [arrivages, setArrivages] = useState<any[]>([]);
+  const [formArr, setFormArr] = useState({ fournisseur: "", produit: "", variete: "", origine: "", quantite: "", unite: "colis", lot_interne: "", lot_fournisseur: "", poids_colis: "" });
+  const [previewArr, setPreviewArr] = useState<any[] | null>(null);
+  const [importingArr, setImportingArr] = useState(false);
+  const [horsListeMode, setHorsListeMode] = useState(false);
+  const [horsListe, setHorsListe] = useState({ produit: "", fournisseur: "", lot_interne: "", lot_fournisseur: "", origine: "", quantite: "", unite: "colis", type: "refusé", raison: "", pct: "" });
+  const [rapportArrivage, setRapportArrivage] = useState<any | null>(null);
+  const [filtersArr, setFiltersArr] = useState({ q: "", statut: "tous" });
+  const [histSearchArr, setHistSearchArr] = useState("");
   const [searchDate, setSearchDate] = useState("");
   const [searchText, setSearchText] = useState("");
   const [filterDecision, setFilterDecision] = useState("");
@@ -269,6 +430,126 @@ export default function App() {
     });
     return () => unsub();
   }, []);
+
+  // ─── FIREBASE: arrivages ───
+  useEffect(() => {
+    const unsub = onValue(ref(db, "arrivages"), snap => {
+      const data = snap.val();
+      if (data) {
+        const list = Object.entries(data).map(([id, v]: [string, any]) => ({ ...v, id }));
+        list.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+        setArrivages(list);
+      } else setArrivages([]);
+    });
+    return () => unsub();
+  }, []);
+
+  // ─── HANDLERS ARRIVAGES ───
+  const handleAgrement = async (arrivage: any, ctrl: any, decision: string, ncType: string, raison: string, pct: string) => {
+    const now2 = new Date();
+    const statut = decision === "conforme" ? "validé" : ncType;
+    const rapport = { qualite: ctrl.qualite, temperature: ctrl.temperature, poids_mesure: ctrl.poids_mesure, observations: ctrl.observations, heure_agreage: now2.toTimeString().slice(0, 5), date_rapport: now2.toLocaleDateString("fr-FR"), agreeur: user?.displayName || "" };
+    const litige = decision === "non_conforme" ? { type: ncType, raison, pct: pct || "", lot_fournisseur: arrivage.lot_fournisseur || "", date: now2.toLocaleDateString("fr-FR"), statut: "ouvert", createdAt: Date.now() } : null;
+    await update(ref(db, `arrivages/${arrivage.id}`), { statut, archived: true, rapport, ...(litige ? { litige } : {}), validatedAt: Date.now() });
+    showToast(decision === "conforme" ? "✅ Validé et archivé" : "📋 Rapport + litige créés");
+  };
+
+  const deleteArrivageItem = async (id: string) => { if (!window.confirm("Supprimer ?")) return; const { remove: fbRemove } = await import("firebase/database"); await fbRemove(ref(db, `arrivages/${id}`)); showToast("Supprimé"); };
+
+  const submitArrivage = async () => {
+    if (!formArr.fournisseur || !formArr.produit || !formArr.quantite) { showToast("⚠ Champs requis manquants", "error"); return; }
+    const now2 = new Date();
+    await push(ref(db, "arrivages"), { ...formArr, statut: "en attente", date: now2.toLocaleDateString("fr-FR"), timestamp: Date.now() });
+    setFormArr({ fournisseur: "", produit: "", variete: "", origine: "", quantite: "", unite: "colis", lot_interne: "", lot_fournisseur: "", poids_colis: "" });
+    setPageMode("arrivages"); showToast("Arrivage enregistré ✓");
+  };
+
+  const handleExcelArr = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]; if (!file) return;
+    setImportingArr(true);
+    const now2 = new Date();
+    if (file.name.endsWith(".pdf")) {
+      const loadPDF = () => new Promise<any>((res, rej) => {
+        if ((window as any).pdfjsLib) { res((window as any).pdfjsLib); return; }
+        const s = document.createElement("script"); s.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+        s.onload = () => { (window as any).pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"; res((window as any).pdfjsLib); };
+        s.onerror = rej; document.head.appendChild(s);
+      });
+      const reader = new FileReader();
+      reader.onload = async (evt) => {
+        try {
+          const lib = await loadPDF();
+          const pdf = await lib.getDocument({ data: evt.target!.result }).promise;
+          let text = "";
+          for (let p = 1; p <= pdf.numPages; p++) { const pg = await pdf.getPage(p); const tc = await pg.getTextContent(); text += tc.items.map((i: any) => i.str).join(" ") + "\n"; }
+          const arr: any[] = []; let curLot = "", curFourn = "", curDate = now2.toLocaleDateString("fr-FR");
+          text.split("\n").forEach((line: string) => {
+            const lm = line.match(/Lot\s+(\d+)\s+Fournisseur\s+\d+\s+(.+?)\s+Date arriv[eé]e\s+(\d{2}\/\d{2}\/\d{4})/i);
+            if (lm) { curLot = lm[1]; curFourn = lm[2].trim().toUpperCase(); curDate = lm[3]; return; }
+            const pm = line.match(/^(\d{2})\s+(\S+)\s+(.+?)\s+(\d+)\s+/);
+            if (pm && parseInt(pm[1]) >= 1 && parseInt(pm[4]) > 0 && pm[3].trim().length > 3) arr.push({ fournisseur: curFourn, produit: pm[3].trim(), lot_interne: curLot, lot_fournisseur: "", quantite: parseInt(pm[4]), unite: "colis", poids_net: "", origine: "", variete: "", date: curDate, timestamp: Date.now() });
+          });
+          if (!arr.length) { showToast("Aucun arrivage détecté", "error"); setImportingArr(false); return; }
+          setPreviewArr(arr); setImportingArr(false);
+        } catch { showToast("Erreur PDF", "error"); setImportingArr(false); }
+      };
+      reader.readAsArrayBuffer(file);
+    } else {
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        const loadXLSX = () => new Promise<any>((res, rej) => {
+          if ((window as any).XLSX) { res((window as any).XLSX); return; }
+          const s = document.createElement("script"); s.src = "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js";
+          s.onload = () => res((window as any).XLSX); s.onerror = rej; document.head.appendChild(s);
+        });
+        loadXLSX().then(XLSX => {
+          const wb = XLSX.read(evt.target!.result, { type: "array" });
+          const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: "" }) as any[][];
+          const arr: any[] = []; let curLot = "", curFourn = "", curDate = now2.toLocaleDateString("fr-FR");
+          rows.forEach(row => {
+            const c0 = String(row[0]||"").trim(), c1 = String(row[1]||"").trim(), c2 = String(row[2]||"").trim(), c3 = String(row[3]||"").trim(), c7 = String(row[7]||"").trim(), c9 = String(row[9]||"").trim();
+            if (c0==="Lot"&&c1){curLot=c1; if(c2==="Fournisseur")curFourn=c3.toUpperCase(); if(c7==="Date arrivée"&&c9){try{const d=new Date(c9);curDate=isNaN(d.getTime())?curDate:d.toLocaleDateString("fr-FR");}catch{}}}
+            const nb=parseInt(String(row[4]||"0"));
+            if(/^0[0-9]$/.test(c0)&&c1&&c2&&nb>0) arr.push({fournisseur:curFourn,produit:c2,lot_interne:curLot,lot_fournisseur:"",quantite:nb,unite:"colis",poids_net:String(row[10]||""),origine:"",variete:"",date:curDate,timestamp:Date.now()});
+          });
+          if(!arr.length){showToast("Aucun arrivage détecté","error");setImportingArr(false);return;}
+          setPreviewArr(arr); setImportingArr(false);
+        }).catch(()=>{showToast("Erreur Excel","error");setImportingArr(false);});
+      };
+      reader.readAsArrayBuffer(file);
+    }
+    e.target.value = "";
+  };
+
+  const confirmImportArr = async () => {
+    if (!previewArr) return;
+    setImportingArr(true);
+    for (const a of previewArr) await push(ref(db, "arrivages"), { ...a, statut: "en attente", timestamp: Date.now() });
+    setPreviewArr(null); setImportingArr(false); showToast(`${previewArr.length} arrivages importés ✓`); setPageMode("arrivages");
+  };
+
+  const submitHorsListe = async () => {
+    if (!horsListe.produit || !horsListe.fournisseur || !horsListe.raison) { showToast("⚠ Produit, fournisseur et raison requis", "error"); return; }
+    const now2 = new Date();
+    await push(ref(db, "arrivages"), { ...horsListe, statut: horsListe.type, hors_liste: true, archived: true, date: now2.toLocaleDateString("fr-FR"), timestamp: Date.now(), validatedAt: Date.now(), litige: { type: horsListe.type, raison: horsListe.raison, pct: horsListe.pct, lot_fournisseur: horsListe.lot_fournisseur, date: now2.toLocaleDateString("fr-FR"), statut: "ouvert", createdAt: Date.now() } });
+    setHorsListeMode(false); setHorsListe({ produit: "", fournisseur: "", lot_interne: "", lot_fournisseur: "", origine: "", quantite: "", unite: "colis", type: "refusé", raison: "", pct: "" });
+    showToast("Litige hors liste enregistré ✓");
+  };
+
+  const ouvrirRapportDepuisArrivage = (arrivage: any) => {
+    // Pré-remplir le formulaire qualité avec les données de l'arrivage
+    setFournisseur(arrivage.fournisseur || "");
+    setProduit(arrivage.produit || "");
+    setOrigine(arrivage.origine || "");
+    setLotMoorea(arrivage.lot_interne || "");
+    setLotFournisseur(arrivage.lot_fournisseur || "");
+    setNbColisAttendu(String(arrivage.quantite || ""));
+    setNbColisRecu(String(arrivage.quantite || ""));
+    setConditionnement(arrivage.unite || "");
+    setRapportArrivage(arrivage);
+    setVue("form");
+    window.scrollTo(0, 0);
+  };
 
   const showToast = (msg: string, type = "success") => {
     setToast({ msg, type });
@@ -459,19 +740,29 @@ _PDF joint_`;
         photoUrls = await uploadPhotosImgBB(photos);
       }
 
-      // 2. Enregistre dans Firebase avec URLs photos
+      // 2. Enregistre dans Firebase avec URLs photos + lien arrivage si applicable
+      const rapportFinal = { ...rapport, photoUrls, ...(rapportArrivage ? { arrivage_id: rapportArrivage.id } : {}) };
       const rapportsRef = ref(db, "rapports");
-      const newRef = await push(rapportsRef, { ...rapport, photoUrls });
+      await push(rapportsRef, rapportFinal);
 
-      // 3. Envoie email avec PDF (avec photos base64)
+      // 3. Si lié à un arrivage, mettre à jour son statut
+      if (rapportArrivage) {
+        const statut = rapport.decision === "stock" ? "validé" : rapport.decision === "reserve" ? "sous réserve" : "refusé";
+        await update(ref(db, `arrivages/${rapportArrivage.id}`), { statut, archived: true, rapport_id: rapport.numeroRapport, validatedAt: Date.now() });
+        setRapportArrivage(null);
+        setPageMode("historique_arr");
+      } else {
+        setVue("historique");
+      }
+
+      // 4. Envoie email avec PDF
       showToast("⏳ Envoi de l'email…");
       await envoyerEmail(rapportAvecPhotos);
 
-      // 4. Reset et navigation
+      // 5. Reset et navigation
       reset();
-      setVue("historique");
       window.scrollTo(0, 0);
-      showToast("Erreur lors de l'envoi", "error");
+      showToast("✉ Rapport envoyé ✓");
     } finally {
       setSendingId(null);
     }
@@ -1573,6 +1864,292 @@ _PDF joint_`;
       </div>
 
       <div className="content-wrap">
+
+        {/* ══ VUE ARRIVAGES ══ */}
+        {pageMode === "arrivages" && vue !== "form" && vue !== "historique" && (
+          <div className="fade-up">
+            {/* Stats rapides */}
+            <div style={{ display: "flex", gap: 10, marginBottom: 20 }}>
+              <StatCardArr label="À traiter" value={arrivages.filter(a=>a.statut==="en attente").length} color="#d97706" />
+              <StatCardArr label="Validés" value={arrivages.filter(a=>a.statut==="validé").length} color="#1a6b3a" />
+            </div>
+            {/* Actions */}
+            <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+              <button onClick={() => setPageMode("saisie_arr")} style={{ padding: "10px 16px", borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 700, border: "1.5px solid #e8e0d0", background: "#c8a84b", color: "#fff", fontFamily: "'Syne', sans-serif" }}>➕ Nouvel arrivage</button>
+              <label style={{ padding: "10px 16px", borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 700, border: "1.5px solid #e8e0d0", background: "#fff", color: "#1a2e1a", display: "inline-block", fontFamily: "'Syne', sans-serif" }}>
+                📊 Import (.xlsx / .pdf)
+                <input type="file" accept=".xlsx,.xls,.pdf" onChange={handleExcelArr} style={{ display: "none" }} />
+              </label>
+              <button onClick={() => setHorsListeMode(true)} style={{ padding: "10px 16px", borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 700, border: "1.5px solid #ffcc80", background: "#fff3e0", color: "#e65100", fontFamily: "'Syne', sans-serif" }}>⚠️ Litige hors liste</button>
+            </div>
+            {/* Preview import */}
+            {previewArr && (
+              <div style={{ background: "#fff", border: "1.5px solid #e8e0d0", borderRadius: 16, padding: "16px", marginBottom: 16 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
+                  <p style={{ margin: 0, fontWeight: 700, color: "#1a6b3a", fontFamily: "'Syne', sans-serif" }}>✅ {previewArr.length} arrivages détectés</p>
+                  <button onClick={() => setPreviewArr(null)} style={{ fontSize: 12, padding: "4px 10px", borderRadius: 8, cursor: "pointer", background: "transparent", border: "1px solid #fca5a5", color: "#dc2626" }}>Annuler</button>
+                </div>
+                {previewArr.slice(0,5).map((a,i) => <div key={i} style={{ background: "#fafffe", borderRadius: 8, padding: "6px 12px", marginBottom: 4, fontSize: 13 }}><strong>{a.produit}</strong> · {a.fournisseur} · {a.quantite} {a.unite}</div>)}
+                {previewArr.length > 5 && <p style={{ fontSize: 12, color: "#6b7280" }}>...et {previewArr.length-5} autres</p>}
+                <button onClick={confirmImportArr} disabled={importingArr} style={{ width: "100%", marginTop: 10, padding: "11px", background: importingArr ? "#ccc" : "#27ae60", color: "#fff", border: "none", borderRadius: 12, fontWeight: 700, fontSize: 14, cursor: "pointer", fontFamily: "'Syne', sans-serif" }}>
+                  {importingArr ? "Import..." : `Confirmer l'import de ${previewArr.length} arrivages →`}
+                </button>
+              </div>
+            )}
+            {/* Filtre */}
+            <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+              <input value={filtersArr.q} onChange={e => setFiltersArr({...filtersArr, q:e.target.value})} placeholder="🔍 Produit ou fournisseur..." style={{ flex: 1, padding: "10px 12px", border: "1.5px solid #e8e0d0", borderRadius: 10, fontSize: 14, outline: "none", boxSizing: "border-box" as const }} />
+              <select value={filtersArr.statut} onChange={e => setFiltersArr({...filtersArr, statut:e.target.value})} style={{ padding: "10px 12px", border: "1.5px solid #e8e0d0", borderRadius: 10, fontSize: 13, width: 150, background: "#fff" }}>
+                <option value="tous">Tous statuts</option>
+                <option value="en attente">En attente</option>
+                <option value="validé">Validés</option>
+                <option value="refusé">Litiges refus</option>
+                <option value="sous réserve">Sous réserve</option>
+              </select>
+            </div>
+            {/* Accordéon date/fournisseur */}
+            {(() => {
+              const enAttente = arrivages.filter(a => a.statut === "en attente" && (!filtersArr.q || `${a.produit} ${a.fournisseur}`.toLowerCase().includes(filtersArr.q.toLowerCase())));
+              if (enAttente.length === 0 && arrivages.filter(a=>a.statut==="en attente").length === 0) return (
+                <div style={{ textAlign: "center", padding: "3rem", background: "#eafaf1", border: "1px solid #d4edda", borderRadius: 20 }}>
+                  <div style={{ fontSize: 36, marginBottom: 10 }}>✅</div>
+                  <p style={{ margin: 0, fontWeight: 700, color: "#1a6b3a", fontFamily: "'Syne', sans-serif" }}>Tout est traité !</p>
+                </div>
+              );
+              if (enAttente.length > 0) {
+                const byDate: Record<string, any[]> = {};
+                enAttente.forEach((a: any) => { const d = a.date || "—"; if (!byDate[d]) byDate[d] = []; byDate[d].push(a); });
+                return (<>
+                  <p style={{ fontWeight: 700, fontSize: 12, color: "#d97706", margin: "0 0 12px", textTransform: "uppercase", letterSpacing: "0.8px", fontFamily: "'Syne', sans-serif" }}>⏳ En attente d'agrément · {enAttente.length}</p>
+                  {Object.entries(byDate).sort((a,b)=>b[0].localeCompare(a[0])).map(([date, arr]) => (
+                    <DateBlock key={date} date={date} arrivages={arr} onValidate={handleAgrement} onDelete={deleteArrivageItem} onOuvreRapport={ouvrirRapportDepuisArrivage} />
+                  ))}
+                </>);
+              }
+              return null;
+            })()}
+            {/* Archivés */}
+            {(() => {
+              const archivesFiltered = arrivages.filter(a => a.statut !== "en attente" && (!filtersArr.q || `${a.produit} ${a.fournisseur}`.toLowerCase().includes(filtersArr.q.toLowerCase())) && (filtersArr.statut === "tous" || a.statut === filtersArr.statut));
+              if (!archivesFiltered.length) return null;
+              return (<>
+                <p style={{ fontWeight: 700, fontSize: 12, color: "#6b7280", margin: "24px 0 10px", textTransform: "uppercase", letterSpacing: "0.8px", fontFamily: "'Syne', sans-serif" }}>📁 Archivés · {archivesFiltered.length}</p>
+                {archivesFiltered.slice(0,15).map(a => (
+                  <div key={a.id} style={{ background: "#fff", borderRadius: 12, padding: "10px 16px", marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: "0 1px 6px rgba(0,0,0,0.04)", borderLeft: `3px solid ${a.statut==="validé"?"#27ae60":a.statut==="refusé"?"#dc2626":"#d97706"}` }}>
+                    <div>
+                      <p style={{ margin: "0 0 2px", fontSize: 13, fontWeight: 600, color: "#1a2e1a" }}>{a.produit} · {a.fournisseur}{a.hors_liste ? <span style={{ marginLeft: 8, fontSize: 10, background: "#fff3e0", color: "#e65100", padding: "1px 6px", borderRadius: 10, fontWeight: 600 }}>Hors liste</span> : null}</p>
+                      <p style={{ margin: 0, fontSize: 11, color: "#6b7280" }}>{a.date}{a.rapport?.qualite ? ` · Note ${a.rapport.qualite}/5` : ""}{a.litige?.raison ? ` · ${a.litige.raison}` : ""}</p>
+                    </div>
+                    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                      <BadgeArrivage status={a.statut} />
+                      <button onClick={() => deleteArrivageItem(a.id)} style={{ background: "transparent", border: "1px solid #fca5a5", color: "#dc2626", borderRadius: 8, padding: "3px 7px", cursor: "pointer", fontSize: 11 }}>🗑</button>
+                    </div>
+                  </div>
+                ))}
+              </>);
+            })()}
+          </div>
+        )}
+
+        {/* ══ VUE SAISIE ARRIVAGE ══ */}
+        {pageMode === "saisie_arr" && vue !== "form" && vue !== "historique" && (
+          <div className="card fade-up" style={{ padding: "20px 24px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+              <p style={{ margin: 0, fontWeight: 700, fontSize: 15, color: "#1a2e1a", fontFamily: "'Syne', sans-serif" }}>➕ Nouvel arrivage</p>
+              <button onClick={() => setPageMode("arrivages")} style={{ fontSize: 12, padding: "6px 12px", borderRadius: 8, cursor: "pointer", background: "transparent", border: "1px solid #e8e0d0", color: "#6b7280" }}>← Retour</button>
+            </div>
+            <div className="grid-2">
+              <F label="Fournisseur" required><input value={formArr.fournisseur} onChange={e=>setFormArr({...formArr,fournisseur:e.target.value})} placeholder="Ex : PICVERT" /></F>
+              <F label="Produit" required><input value={formArr.produit} onChange={e=>setFormArr({...formArr,produit:e.target.value})} placeholder="Ex : Tomate grappe" /></F>
+              <F label="Variété"><input value={formArr.variete} onChange={e=>setFormArr({...formArr,variete:e.target.value})} /></F>
+              <F label="Origine"><input value={formArr.origine} onChange={e=>setFormArr({...formArr,origine:e.target.value})} /></F>
+              <F label="N° Lot interne"><input value={formArr.lot_interne} onChange={e=>setFormArr({...formArr,lot_interne:e.target.value})} /></F>
+              <F label="N° Lot fournisseur"><input value={formArr.lot_fournisseur} onChange={e=>setFormArr({...formArr,lot_fournisseur:e.target.value})} /></F>
+              <F label="Quantité" required>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input type="number" value={formArr.quantite} onChange={e=>setFormArr({...formArr,quantite:e.target.value})} style={{ flex: 1 }} />
+                  <select value={formArr.unite} onChange={e=>setFormArr({...formArr,unite:e.target.value})} style={{ width: 90 }}><option>colis</option><option>kg</option></select>
+                </div>
+              </F>
+              <F label="Poids colis (kg)"><input type="number" step="0.1" value={formArr.poids_colis} onChange={e=>setFormArr({...formArr,poids_colis:e.target.value})} /></F>
+            </div>
+            <button className="btn-primary" onClick={submitArrivage}>✓ Enregistrer l'arrivage</button>
+          </div>
+        )}
+
+        {/* ══ VUE HISTORIQUE ARRIVAGES ══ */}
+        {pageMode === "historique_arr" && vue !== "form" && vue !== "historique" && (
+          <div className="fade-up">
+            <p style={{ fontWeight: 700, fontSize: 12, color: "#6b7280", margin: "0 0 12px", textTransform: "uppercase", letterSpacing: "0.8px", fontFamily: "'Syne', sans-serif" }}>
+              📁 Historique · {arrivages.filter(a => a.date !== new Date().toLocaleDateString("fr-FR")).length} arrivages
+            </p>
+            <input value={histSearchArr} onChange={e=>setHistSearchArr(e.target.value)} placeholder="🔍 Produit, fournisseur, lot..." style={{ width: "100%", padding: "10px 12px", border: "1.5px solid #e8e0d0", borderRadius: 10, fontSize: 14, outline: "none", marginBottom: 14, boxSizing: "border-box" as const }} />
+            {arrivages
+              .filter(a => a.date !== new Date().toLocaleDateString("fr-FR"))
+              .filter(a => !histSearchArr || `${a.produit} ${a.fournisseur} ${a.lot_interne}`.toLowerCase().includes(histSearchArr.toLowerCase()))
+              .map(a => {
+                const rapport = rapports.find(r => r.arrivage_id === a.id);
+                const borderColor = a.statut==="validé" ? "#27ae60" : a.statut==="refusé" ? "#dc2626" : a.statut==="sous réserve" ? "#d97706" : "#d97706";
+                return (
+                  <div key={a.id} style={{ background: "#fff", borderRadius: 16, boxShadow: "0 2px 16px rgba(0,0,0,0.05)", marginBottom: 12, overflow: "hidden", borderLeft: `4px solid ${borderColor}` }}>
+
+                    {/* Header arrivage */}
+                    <div style={{ padding: "14px 18px", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ margin: "0 0 5px", fontWeight: 700, fontSize: 14, color: "#1a2e1a", fontFamily: "'Syne', sans-serif" }}>
+                          {a.produit}{a.variete ? ` · ${a.variete}` : ""}
+                          {a.hors_liste && <span style={{ marginLeft: 8, fontSize: 10, background: "#fff3e0", color: "#e65100", padding: "2px 7px", borderRadius: 10, fontWeight: 600 }}>Hors liste</span>}
+                          {a.destruction && <span style={{ marginLeft: 8, fontSize: 10, background: "#fef2f2", color: "#dc2626", padding: "2px 7px", borderRadius: 10, fontWeight: 600 }}>🗑 Destruction demandée</span>}
+                        </p>
+                        <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+                          <PillArr>🏭 {a.fournisseur}</PillArr>
+                          <PillArr>📦 {a.quantite} {a.unite}</PillArr>
+                          {a.lot_interne && <PillArr>🔖 {a.lot_interne}</PillArr>}
+                          {a.origine && <PillArr>🌍 {a.origine}</PillArr>}
+                          <span style={{ fontSize: 11, color: "#6b7280", alignSelf: "center" }}>📅 {a.date}</span>
+                        </div>
+                      </div>
+                      <BadgeArrivage status={a.statut} />
+                    </div>
+
+                    {/* Rapport rattaché */}
+                    {rapport && (
+                      <div style={{ borderTop: "1px solid #e8e0d0", padding: "10px 18px", background: "#faf8f3", display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: "#1a2e1a" }}>📋 {rapport.numeroRapport}</span>
+                        {rapport.notes?.qualite > 0 && <span style={{ fontSize: 12, color: NOTE_COLORS[rapport.notes.qualite], fontWeight: 700, background: NOTE_COLORS[rapport.notes.qualite]+"15", padding: "2px 8px", borderRadius: 20 }}>Note {rapport.notes.qualite}/5 — {NOTE_LABELS[rapport.notes.qualite]}</span>}
+                        {rapport.temperature && <span style={{ fontSize: 12, color: "#1d4ed8" }}>🌡 {rapport.temperature}°C</span>}
+                        {rapport.score && <ScoreCircle score={rapport.score} />}
+                        {rapport.observations && <span style={{ fontSize: 12, color: "#6b7280", fontStyle: "italic" }}>"{rapport.observations}"</span>}
+                        <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+                          <button onClick={() => downloadPDF(rapport)} style={{ padding: "5px 12px", borderRadius: 8, border: "1px solid #e8e0d0", background: "#faf8f3", color: "#8a6f2e", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>📤 PDF</button>
+                          <button onClick={() => partagerWhatsApp(rapport)} style={{ padding: "5px 12px", borderRadius: 8, border: "none", background: "#25d366", color: "#fff", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>WhatsApp</button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Litige rattaché */}
+                    {a.litige && (
+                      <div style={{ borderTop: `1px solid ${a.litige.type==="refusé"?"#fca5a5":"#fcd34d"}`, padding: "10px 18px", background: a.litige.type==="refusé"?"#fef2f2":"#fffbeb", display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: a.litige.type==="refusé"?"#dc2626":"#d97706" }}>{a.litige.type==="refusé"?"❌ Litige refus":"⚠️ Litige réserve"}</span>
+                        <span style={{ fontSize: 12, color: a.litige.type==="refusé"?"#dc2626":"#d97706" }}>{a.litige.raison}</span>
+                        {a.litige.pct && <span style={{ fontSize: 11, color: "#6b7280" }}>{a.litige.pct}% concerné</span>}
+                        <span style={{ marginLeft: "auto", fontSize: 11, background: a.litige.statut==="ouvert"?"#fef2f2":"#f0fdf4", color: a.litige.statut==="ouvert"?"#dc2626":"#1a6b3a", padding: "2px 8px", borderRadius: 20, fontWeight: 600, border: `1px solid ${a.litige.statut==="ouvert"?"#fca5a5":"#d4edda"}` }}>{a.litige.statut==="ouvert"?"● Ouvert":"✓ Clôturé"}</span>
+                      </div>
+                    )}
+
+                    {/* Destruction lot */}
+                    {a.destruction && (
+                      <div style={{ borderTop: "1px solid #fca5a5", padding: "10px 18px", background: "#fef2f2", display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: "#dc2626" }}>🗑 Destruction lot</span>
+                        <span style={{ fontSize: 12, color: "#dc2626" }}>{a.destruction.quantite} {a.unite} — {a.destruction.raison}</span>
+                        <span style={{ fontSize: 11, color: "#6b7280" }}>Demandé le {a.destruction.date}</span>
+                      </div>
+                    )}
+
+                    {/* Actions */}
+                    <div style={{ borderTop: "1px solid #f0f0f0", padding: "10px 16px", display: "flex", gap: 8 }}>
+                      {!rapport && (
+                        <button onClick={() => ouvrirRapportDepuisArrivage(a)}
+                          style={{ padding: "8px 16px", borderRadius: 10, border: "1.5px solid #e8e0d0", background: "#faf8f3", color: "#c8a84b", cursor: "pointer", fontSize: 13, fontWeight: 700, fontFamily: "'Syne', sans-serif" }}>
+                          📋 Faire un rapport
+                        </button>
+                      )}
+                      {!a.destruction && (
+                        <button onClick={async () => {
+                          const qte = window.prompt(`Quantité à détruire (sur ${a.quantite} ${a.unite}) :`);
+                          if (!qte) return;
+                          const raison = window.prompt("Raison de la destruction :");
+                          if (!raison) return;
+                          await update(ref(db, `arrivages/${a.id}`), {
+                            destruction: { quantite: qte, raison, date: new Date().toLocaleDateString("fr-FR"), demandePar: user?.displayName || user?.email || "—" }
+                          });
+                          showToast("🗑 Destruction enregistrée");
+                        }}
+                          style={{ padding: "8px 16px", borderRadius: 10, border: "1.5px solid #fca5a5", background: "#fef2f2", color: "#dc2626", cursor: "pointer", fontSize: 13, fontWeight: 700, fontFamily: "'Syne', sans-serif" }}>
+                          🗑 Demander destruction
+                        </button>
+                      )}
+                    </div>
+
+                  </div>
+                );
+              })}
+            {arrivages.filter(a => a.date !== new Date().toLocaleDateString("fr-FR")).length === 0 && (
+              <div style={{ textAlign: "center", padding: "3rem", background: "#f5f3ee", borderRadius: 20 }}>
+                <div style={{ fontSize: 36, marginBottom: 10 }}>📁</div>
+                <p style={{ margin: 0, fontWeight: 700, color: "#6b7280", fontFamily: "'Syne', sans-serif" }}>Aucun arrivage dans l'historique</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ══ VUE STATS ARRIVAGES ══ */}
+        {pageMode === "stats_arr" && vue !== "form" && vue !== "historique" && (
+          <div className="fade-up">
+            <p style={{ fontWeight:700, fontSize:12, color:"#6b7280", margin:"0 0 16px", textTransform:"uppercase", letterSpacing:"0.8px", fontFamily:"'Syne',sans-serif" }}>📊 Stats fournisseurs</p>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:10, marginBottom:20 }}>
+              <StatCardArr label="Total arrivages" value={arrivages.length} color="#c8a84b" />
+              <StatCardArr label="Taux conformité" value={arrivages.filter(a=>a.statut!=="en attente").length ? `${Math.round(arrivages.filter(a=>a.statut==="validé").length/Math.max(arrivages.filter(a=>a.statut!=="en attente").length,1)*100)}%` : "—"} color="#1a6b3a" />
+              <StatCardArr label="Litiges ouverts" value={arrivages.filter(a=>a.litige?.statut==="ouvert").length} color="#dc2626" />
+            </div>
+            {(() => {
+              const map: Record<string,{total:number,valides:number,litiges:number,score:number[]}> = {};
+              arrivages.forEach(a=>{if(!map[a.fournisseur])map[a.fournisseur]={total:0,valides:0,litiges:0,score:[]};map[a.fournisseur].total++;if(a.statut==="validé")map[a.fournisseur].valides++;if(a.statut==="refusé"||a.statut==="sous réserve")map[a.fournisseur].litiges++;if(a.rapport?.qualite)map[a.fournisseur].score.push(a.rapport.qualite);});
+              return Object.entries(map).sort((a,b)=>b[1].litiges-a[1].litiges).map(([f,s])=>{
+                const scoreMoyen = s.score.length ? (s.score.reduce((a,b)=>a+b,0)/s.score.length).toFixed(1) : null;
+                const tauxLitige = s.total ? Math.round(s.litiges/s.total*100) : 0;
+                return (
+                  <div key={f} style={{ background:"#fff", borderRadius:14, padding:"14px 18px", marginBottom:10, boxShadow:"0 2px 12px rgba(0,0,0,0.05)", borderLeft:`4px solid ${s.litiges>0?"#dc2626":"#27ae60"}` }}>
+                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+                      <p style={{ margin:0, fontWeight:700, fontSize:14, color:"#1a2e1a", fontFamily:"'Syne',sans-serif" }}>{f}</p>
+                      <div style={{ display:"flex", gap:6 }}>
+                        {scoreMoyen&&<span style={{ fontSize:12, fontWeight:700, color:NOTE_COLORS[Math.round(parseFloat(scoreMoyen))], background:NOTE_COLORS[Math.round(parseFloat(scoreMoyen))]+"15", padding:"2px 8px", borderRadius:20 }}>⭐ {scoreMoyen}/5</span>}
+                        {tauxLitige>0&&<span style={{ fontSize:12, fontWeight:700, color:"#dc2626", background:"#fef2f2", padding:"2px 8px", borderRadius:20, border:"1px solid #fca5a5" }}>{tauxLitige}% litiges</span>}
+                      </div>
+                    </div>
+                    <div style={{ display:"flex", gap:16 }}>
+                      <span style={{ fontSize:12, color:"#6b7280" }}>{s.total} arrivages</span>
+                      <span style={{ fontSize:12, color:"#1a6b3a" }}>✓ {s.valides} validés</span>
+                      {s.litiges>0&&<span style={{ fontSize:12, color:"#dc2626" }}>⚠ {s.litiges} litiges</span>}
+                    </div>
+                    <div style={{ marginTop:8, height:5, background:"#f3f4f6", borderRadius:10, overflow:"hidden" }}>
+                      <div style={{ height:"100%", background:tauxLitige>30?"#dc2626":tauxLitige>10?"#d97706":"#27ae60", width:`${100-tauxLitige}%`, borderRadius:10, transition:"width 0.5s" }} />
+                    </div>
+                  </div>
+                );
+              });
+            })()}
+          </div>
+        )}
+
+        {/* MODAL HORS LISTE */}
+        {horsListeMode && (
+          <div style={{ position:"fixed", inset:0, zIndex:200, background:"rgba(0,0,0,0.5)", display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
+            <div style={{ background:"#fff", borderRadius:20, width:"100%", maxWidth:480, boxShadow:"0 8px 40px rgba(0,0,0,0.18)", overflow:"hidden", maxHeight:"90vh", overflowY:"auto" }}>
+              <div style={{ background:"#fff3e0", borderBottom:"1px solid #ffcc80", padding:"14px 20px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                <p style={{ margin:0, fontWeight:700, fontSize:15, color:"#e65100", fontFamily:"'Syne',sans-serif" }}>⚠️ Litige hors liste</p>
+                <button onClick={()=>setHorsListeMode(false)} style={{ background:"none", border:"none", cursor:"pointer", fontSize:20, color:"#6b7280" }}>×</button>
+              </div>
+              <div style={{ padding:"16px 20px" }}>
+                <div className="grid-2">
+                  <F label="Produit" required><input value={horsListe.produit} onChange={e=>setHorsListe({...horsListe,produit:e.target.value})} /></F>
+                  <F label="Fournisseur" required><input value={horsListe.fournisseur} onChange={e=>setHorsListe({...horsListe,fournisseur:e.target.value})} /></F>
+                  <F label="N° Lot interne"><input value={horsListe.lot_interne} onChange={e=>setHorsListe({...horsListe,lot_interne:e.target.value})} /></F>
+                  <F label="N° Lot fournisseur"><input value={horsListe.lot_fournisseur} onChange={e=>setHorsListe({...horsListe,lot_fournisseur:e.target.value})} /></F>
+                </div>
+                <F label="Type">
+                  <div style={{ display:"flex", gap:8 }}>
+                    {["refusé","sous réserve"].map(t=>(
+                      <button key={t} onClick={()=>setHorsListe({...horsListe,type:t})} style={{ flex:1, padding:"9px", borderRadius:10, cursor:"pointer", fontWeight:700, fontSize:12, border:`2px solid ${horsListe.type===t?(t==="refusé"?"#dc2626":"#d97706"):"#e5e7eb"}`, background:horsListe.type===t?(t==="refusé"?"#fef2f2":"#fffbeb"):"#fff", color:horsListe.type===t?(t==="refusé"?"#dc2626":"#d97706"):"#6b7280", fontFamily:"'Syne',sans-serif" }}>{t==="refusé"?"❌ Refus":"⚠️ Réserve"}</button>
+                    ))}
+                  </div>
+                </F>
+                <F label="Raison" required><input value={horsListe.raison} onChange={e=>setHorsListe({...horsListe,raison:e.target.value})} placeholder="Ex : Moisissures..." /></F>
+                <button onClick={submitHorsListe} className="btn-primary" style={{ background:horsListe.type==="refusé"?"#dc2626":"#d97706" }}>📋 Enregistrer →</button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* FORMULAIRE */}
         {vue === "form" && (
