@@ -512,7 +512,19 @@ export default function App() {
           const arr: any[] = []; let curLot = "", curFourn = "", curDate = now2.toLocaleDateString("fr-FR");
           rows.forEach(row => {
             const c0 = String(row[0]||"").trim(), c1 = String(row[1]||"").trim(), c2 = String(row[2]||"").trim(), c3 = String(row[3]||"").trim(), c7 = String(row[7]||"").trim(), c9 = String(row[9]||"").trim();
-            if (c0==="Lot"&&c1){curLot=c1; if(c2==="Fournisseur")curFourn=c3.toUpperCase(); if(c7==="Date arrivée"&&c9){try{const d=new Date(c9);curDate=isNaN(d.getTime())?curDate:d.toLocaleDateString("fr-FR");}catch{}}}
+            if (c0==="Lot"&&c1){curLot=c1; if(c2==="Fournisseur")curFourn=c3.toUpperCase(); if(c7==="Date arrivée"&&c9){try{
+              // Excel date serial : nombre de jours depuis 01/01/1900
+              const raw = c9;
+              let parsedDate: Date | null = null;
+              if (typeof raw === "number") {
+                // Numéro de série Excel → date réelle
+                const excelEpoch = new Date(1899, 11, 30);
+                parsedDate = new Date(excelEpoch.getTime() + raw * 86400000);
+              } else {
+                parsedDate = new Date(raw);
+              }
+              curDate = parsedDate && !isNaN(parsedDate.getTime()) ? parsedDate.toLocaleDateString("fr-FR") : curDate;
+            }catch{}}}
             const nb=parseInt(String(row[4]||"0"));
             if(/^0[0-9]$/.test(c0)&&c1&&c2&&nb>0) arr.push({fournisseur:curFourn,produit:c2,lot_interne:curLot,lot_fournisseur:"",quantite:nb,unite:"colis",poids_net:String(row[10]||""),origine:"",variete:"",date:curDate,timestamp:Date.now()});
           });
