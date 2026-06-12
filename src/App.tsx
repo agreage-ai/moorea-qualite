@@ -322,14 +322,20 @@ function DateBlock({ date, arrivages, onValidate, onDelete, onOuvreRapport }: an
   arrivages.forEach((a: any) => { if (!byFournisseur[a.fournisseur]) byFournisseur[a.fournisseur] = []; byFournisseur[a.fournisseur].push(a); });
   return (
     <div style={{ marginBottom: 16 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, userSelect: "none" }}>
-        <div onClick={() => setOpen(!open)} style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", flex: 1 }}>
-          <span style={{ fontSize: 12, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.5px", fontFamily: "'Syne', sans-serif" }}>📅 {date}</span>
-          <span style={{ fontSize: 16, color: "#d97706", transform: open ? "rotate(90deg)" : "none", transition: "transform 0.2s", display: "inline-block" }}>›</span>
+      <div onClick={() => setOpen(!open)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", userSelect: "none", background: open ? "#1a2e1a" : "#2d3a2d", borderRadius: 14, padding: "12px 16px", marginBottom: open ? 8 : 0, boxShadow: "0 2px 10px rgba(0,0,0,0.12)", transition: "all 0.2s" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ width: 34, height: 34, borderRadius: 9, background: "#c8a84b22", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, flexShrink: 0 }}>📅</div>
+          <div>
+            <p style={{ margin: 0, fontWeight: 700, fontSize: 14, color: "#c8a84b", fontFamily: "'Syne', sans-serif" }}>{date}</p>
+            <p style={{ margin: 0, fontSize: 11, color: "rgba(255,255,255,0.5)" }}>{Object.keys((() => { const m: Record<string,boolean> = {}; arrivages.forEach((a:any) => { m[a.fournisseur]=true; }); return m; })()).length} fournisseur{Object.keys((() => { const m: Record<string,boolean> = {}; arrivages.forEach((a:any) => { m[a.fournisseur]=true; }); return m; })()).length > 1 ? "s" : ""}</p>
+          </div>
         </div>
-        <span onClick={() => setOpen(!open)} style={{ fontSize: 12, background: open ? "#d97706" : "#fffbeb", color: open ? "#fff" : "#d97706", padding: "4px 12px", borderRadius: 20, fontWeight: 700, cursor: "pointer", border: "1.5px solid #fcd34d", transition: "all 0.15s" }}>
-          {arrivages.length} en attente
-        </span>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 12, background: "#d97706", color: "#fff", padding: "4px 12px", borderRadius: 20, fontWeight: 700 }}>
+            {arrivages.length} article{arrivages.length > 1 ? "s" : ""}
+          </span>
+          <span style={{ fontSize: 18, color: "#c8a84b", fontWeight: 700, transform: open ? "rotate(90deg)" : "none", transition: "transform 0.2s", display: "inline-block" }}>›</span>
+        </div>
       </div>
       {open && Object.entries(byFournisseur).map(([f, p]) => <FournisseurBlock key={f} fournisseur={f} produits={p} onValidate={onValidate} onDelete={onDelete} onOuvreRapport={onOuvreRapport} />)}
     </div>
@@ -489,96 +495,110 @@ export default function App() {
           const lib = await loadPDF();
           const pdf = await lib.getDocument({ data: evt.target!.result }).promise;
 
-          // Récupère tous les items de texte avec leur position X/Y
+          // Extrait tous les items avec position
           const allItems: { str: string; x: number; y: number; page: number }[] = [];
           for (let p = 1; p <= pdf.numPages; p++) {
             const pg = await pdf.getPage(p);
             const tc = await pg.getTextContent();
             tc.items.forEach((i: any) => {
-              if (i.str?.trim()) allItems.push({ str: i.str.trim(), x: Math.round(i.transform[4]), y: Math.round(i.transform[5]), page: p });
+              const s = i.str?.trim();
+              if (s) allItems.push({ str: s, x: Math.round(i.transform[4]), y: Math.round(i.transform[5]), page: p });
             });
           }
 
-          // Regroupe par ligne (même Y ± 3px)
-          const lines: string[][] = [];
-          const lineMap: Record<string, string[]> = {};
+          // Regroupe par ligne (même page + Y ± 3px)
+          const lineMap: Map<string, { str: string; x: number }[]> = new Map();
           allItems.forEach(item => {
-            const key = `${item.page}_${Math.round(item.y / 4) * 4}`;
-            if (!lineMap[key]) { lineMap[key] = []; lines.push(lineMap[key]); }
-            lineMap[key].push(item.str);
+            const key = `${item.page}_${Math.round(item.y / 3) * 3}`;
+            if (!lineMap.has(key)) lineMap.set(key, []);
+            lineMap.get(key)!.push({ str: item.str, x: item.x });
+          });
+
+          // Trie chaque ligne par X et construit le texte
+          const lines: string[] = [];
+          lineMap.forEach(items => {
+            items.sort((a, b) => a.x - b.x);
+            lines.push(items.map(i => i.str).join(" "));
           });
 
           const arr: any[] = [];
           let curLot = "", curFourn = "", curDate = now2.toLocaleDateString("fr-FR");
 
-          lines.forEach(tokens => {
-            const line = tokens.join(" ");
-
-            // Détecte ligne de lot : "Lot 26064412 Fournisseur 1473 GREENYARD FRESH Date arrivée 11/06/2026"
-            const lotMatch = line.match(/Lot\s+(\d{8,})\s+Fournisseur\s+\d+\s+(.+?)\s+Date\s+arriv[eé]e\s+(\d{2}\/\d{2}\/\d{4})/i);
-            if (lotMatch) {
-              curLot = lotMatch[1];
-              curFourn = lotMatch[2].trim().toUpperCase();
-              // Parse date dd/mm/yyyy
-              const [dd, mm, yyyy] = lotMatch[3].split("/");
-              const d = new Date(parseInt(yyyy), parseInt(mm) - 1, parseInt(dd));
-              curDate = d.toLocaleDateString("fr-FR");
-              return;
+          for (const line of lines) {
+            // === LIGNE LOT ===
+            // "Lot 26064412 Fournisseur 1473 GREENYARD FRESH Date arrivée 11/06/2026"
+            const lotM = line.match(/Lot\s+(\d{7,})\s+Fournisseur\s+\d+\s+(.+?)\s+Date\s+arriv[eé]e\s+(\d{2}\/\d{2}\/\d{4})/i);
+            if (lotM) {
+              curLot = lotM[1];
+              curFourn = lotM[2].replace(/\s+/g, " ").trim().toUpperCase();
+              const [dd, mm, yyyy] = lotM[3].split("/");
+              curDate = new Date(+yyyy, +mm - 1, +dd).toLocaleDateString("fr-FR");
+              continue;
             }
 
-            // Détecte ligne article : commence par "01", "02"... suivi du nb colis
-            // Format: "01 [code] LIBELLE ... Rec. NB_COLIS ..."
-            // On cherche un numéro de séquence 2 chiffres en début
-            const slMatch = tokens[0]?.match(/^(\d{2})$/);
-            if (slMatch && parseInt(slMatch[1]) >= 1 && parseInt(slMatch[1]) <= 99 && curFourn) {
-              // Reconstruit le libellé : tout sauf le premier token (SL) et les nombres finaux
-              // On cherche le nb de colis = premier nombre entier après le libellé
-              let libelle = "";
-              let nbColis = 0;
+            // === LIGNE ARTICLE ===
+            // "01 PATATE003 6 PATATE DOUCE EGYPTE CAL.L 1 CARTON 6 KG CAT 1 540 3240,00 ..."
+            // "02 VS800 CHAMPIGNON ERINGY (VRAC 4 KG) 20 80,00 ..."
+            // Le nb de colis est le premier entier APRÈS le code article et le libellé
+            // Structure : SL(2ch) | code(optionnel) | libellé multiligne | nb_colis | poids...
+            const slM = line.match(/^(\d{2})\s+/);
+            if (slM && parseInt(slM[1]) >= 1 && curFourn) {
+              const rest = line.slice(slM[0].length);
+              // Retire le code article (1er token tout en majuscules/chiffres sans espace, ≤15 chars)
+              const codeM = rest.match(/^([A-Z0-9]{3,15})\s+/);
+              const afterCode = codeM ? rest.slice(codeM[0].length) : rest;
 
-              // Cherche le nb colis : dans les tokens, c'est un entier > 0 qui apparaît après le libellé
-              // Dans le PDF Geslot : SL | code article | libellé | Rec. | Nb colis | ...
-              // On prend tous les tokens non-numériques comme libellé, puis le premier nombre entier = nb colis
-              const textTokens = tokens.slice(1); // retire le SL
-              let foundColis = false;
-              const libParts: string[] = [];
-              for (const t of textTokens) {
-                if (!foundColis && /^\d+$/.test(t) && parseInt(t) > 0 && libParts.length > 0) {
-                  nbColis = parseInt(t);
-                  foundColis = true;
-                } else if (!foundColis) {
-                  // Ignore codes articles (majuscules+chiffres sans espaces, courts)
-                  if (t.length <= 12 && /^[A-Z0-9]+$/.test(t) && libParts.length === 0) continue;
-                  libParts.push(t);
-                }
+              // Le libellé s'arrête au premier grand nombre entier (nb colis)
+              // On cherche un entier ≥ 1 précédé d'un espace, suivi d'un espace puis d'un nombre décimal
+              // Exemple: "PATATE DOUCE EGYPTE CAL.L 1 CARTON 6 KG CAT 1 540 3240,00"
+              // Le nb colis = 540
+              // On prend le dernier groupe de chiffres entiers avant les décimaux (,)
+              const nums = [...afterCode.matchAll(/\b(\d+)\b(?!\s*[\d,])/g)];
+              // En fait cherchons plus simplement : tous les entiers dans la ligne
+              const allNums = [...afterCode.matchAll(/\b(\d+)\b/g)].map(m => ({ val: parseInt(m[1]), idx: m.index! }));
+              
+              // Le nb de colis est typiquement le plus grand entier "isolé" avant les décimaux
+              // Stratégie : on prend l'entier qui précède directement un nombre décimal (x,xx)
+              let nbColis = 0;
+              let libelleEnd = afterCode.length;
+              
+              const decimalMatch = afterCode.match(/(\d+)\s+(\d+[,\.]\d+)/);
+              if (decimalMatch) {
+                nbColis = parseInt(decimalMatch[1]);
+                libelleEnd = afterCode.indexOf(decimalMatch[0]);
+              } else {
+                // Fallback : dernier entier de la ligne
+                const lastNum = allNums[allNums.length - 1];
+                if (lastNum) { nbColis = lastNum.val; libelleEnd = lastNum.idx; }
               }
 
-              libelle = libParts.join(" ").trim();
-              // Nettoie le libellé : retire trailing numbers/codes
-              libelle = libelle.replace(/\s+\d[\d,\.]*$/, "").trim();
+              const libelle = afterCode.slice(0, libelleEnd).replace(/\s+/g, " ").trim();
+              // Nettoie le libellé : retire les codes article répétés au début
+              const libellePropre = libelle.replace(/^[A-Z0-9]{3,15}\s+/, "").trim();
 
-              if (nbColis > 0 && libelle.length > 3) {
-                // Extrait origine depuis le libellé (dernier mot majuscule souvent = pays)
-                const origineMatch = libelle.match(/\b(FRANCE|ESPAGNE|MAROC|KENYA|COLOMBIE|BRESIL|EGYPTE|PEROU|ISRAEL|PAYS-BAS|ITALIE|ALLEMAGNE|BELGIQUE|GHANA|SENEGAL|HONDURAS|CHINE|THAÏLANDE|INDE)\b/i);
+              // Extrait l'origine depuis le libellé
+              const origineM = libellePropre.match(/\b(FRANCE|ESPAGNE|MAROC|KENYA|COLOMBIE|BRESIL|EGYPTE|PEROU|ISRAEL|PAYS.BAS|ITALIE|ALLEMAGNE|BELGIQUE|GHANA|SENEGAL|HONDURAS|CHINE|HOLLANDE|THAÏLANDE|INDE)\b/i);
+
+              if (nbColis > 0 && libellePropre.length > 3) {
                 arr.push({
                   fournisseur: curFourn,
-                  produit: libelle,
+                  produit: libellePropre,
                   lot_interne: curLot,
                   lot_fournisseur: "",
                   quantite: nbColis,
                   unite: "colis",
-                  origine: origineMatch ? origineMatch[1] : "",
+                  origine: origineM ? origineM[1].charAt(0).toUpperCase() + origineM[1].slice(1).toLowerCase() : "",
                   variete: "",
                   date: curDate,
                   timestamp: Date.now(),
                 });
               }
             }
-          });
+          }
 
           if (!arr.length) { showToast("Aucun arrivage détecté dans le PDF", "error"); setImportingArr(false); return; }
           setPreviewArr(arr); setImportingArr(false);
-        } catch (e) { console.error(e); showToast("Erreur PDF", "error"); setImportingArr(false); }
+        } catch (e) { console.error("PDF parse error:", e); showToast("Erreur PDF — vérifie la console", "error"); setImportingArr(false); }
       };
       reader.readAsArrayBuffer(file);
     } else {
