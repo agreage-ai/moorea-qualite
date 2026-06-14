@@ -318,14 +318,15 @@ function FournisseurBlock({ fournisseur, produits, onValidate, onDelete, onOuvre
   );
 }
 
-function DateBlock({ date, arrivages, onValidate, onDelete, onOuvreRapport, selectMode, selectedArrivages, onToggleSelect }: any) {
+function DateBlock({ date, arrivages, onValidate, onDelete, onOuvreRapport, selectMode, selectedArrivages, onToggleSelect, onScan }: any) {
   const today = new Date().toLocaleDateString("fr-FR");
   const [open, setOpen] = useState(date === today);
+  const scanInputId = `scan-date-${date.replace(/\//g, "-")}`;
   const byFournisseur: Record<string, any[]> = {};
   arrivages.forEach((a: any) => { if (!byFournisseur[a.fournisseur]) byFournisseur[a.fournisseur] = []; byFournisseur[a.fournisseur].push(a); });
   return (
     <div style={{ marginBottom: 16 }}>
-      <div onClick={() => setOpen(!open)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", userSelect: "none", background: open ? "#1a2e1a" : "#2d3a2d", borderRadius: 14, padding: "12px 16px", marginBottom: open ? 8 : 0, boxShadow: "0 2px 10px rgba(0,0,0,0.12)", transition: "all 0.2s" }}>
+      <div onClick={() => setOpen(!open)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", userSelect: "none", background: open ? "#1a2e1a" : "#2d3a2d", borderRadius: open ? "14px 14px 0 0" : 14, padding: "12px 16px", boxShadow: "0 2px 10px rgba(0,0,0,0.12)", transition: "all 0.2s" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <div style={{ width: 34, height: 34, borderRadius: 9, background: "#c8a84b22", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, flexShrink: 0 }}>📅</div>
           <div>
@@ -340,7 +341,21 @@ function DateBlock({ date, arrivages, onValidate, onDelete, onOuvreRapport, sele
           <span style={{ fontSize: 18, color: "#c8a84b", fontWeight: 700, transform: open ? "rotate(90deg)" : "none", transition: "transform 0.2s", display: "inline-block" }}>›</span>
         </div>
       </div>
-      {open && Object.entries(byFournisseur).map(([f, p]) => <FournisseurBlock key={f} fournisseur={f} produits={p} onValidate={onValidate} onDelete={onDelete} onOuvreRapport={onOuvreRapport} selectMode={selectMode} selectedArrivages={selectedArrivages} onToggleSelect={onToggleSelect} />)}
+      {open && (
+        <div style={{ background: "#1a2e1a", borderRadius: "0 0 14px 14px", padding: "10px 14px 14px", marginBottom: 8 }}>
+          {/* Bouton scanner étiquette */}
+          <div style={{ marginBottom: 10, display: "flex", alignItems: "center", gap: 10, background: "rgba(59,130,246,0.15)", border: "1px solid rgba(59,130,246,0.4)", borderRadius: 10, padding: "8px 14px" }}>
+            <span style={{ fontSize: 16, flexShrink: 0 }}>🔍</span>
+            <p style={{ margin: 0, fontSize: 12, color: "#93c5fd", flex: 1 }}>Scanner une étiquette pour identifier le lot</p>
+            <input type="file" accept="image/*" id={scanInputId} style={{ display: "none" }} onChange={e => { onScan(e, arrivages); e.target.value = ""; }} />
+            <label htmlFor={scanInputId} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "6px 14px", background: "linear-gradient(135deg, #3b82f6, #1d4ed8)", color: "#fff", borderRadius: 8, cursor: "pointer", fontSize: 12, fontWeight: 700, fontFamily: "'Syne', sans-serif", flexShrink: 0 }}>
+              📷 Scanner
+            </label>
+          </div>
+          {/* Fournisseurs */}
+          {Object.entries(byFournisseur).map(([f, p]) => <FournisseurBlock key={f} fournisseur={f} produits={p} onValidate={onValidate} onDelete={onDelete} onOuvreRapport={onOuvreRapport} selectMode={selectMode} selectedArrivages={selectedArrivages} onToggleSelect={onToggleSelect} />)}
+        </div>
+      )}
     </div>
   );
 }
@@ -407,6 +422,7 @@ export default function App() {
   const [editRapport, setEditRapport] = useState<any | null>(null);
   const [user, setUser] = useState<any | null>(undefined);
   const [showAccueil, setShowAccueil] = useState(true);
+  const [showLitiges, setShowLitiges] = useState(false);
   const [signatureModal, setSignatureModal] = useState<any | null>(null);
   const [sigNom, setSigNom] = useState("");
   const [sigPrenom, setSigPrenom] = useState("");
@@ -1910,7 +1926,7 @@ _PDF joint_`;
     const nbLitiges = arrivages.filter(a => (a.statut === "refusé" || a.litige?.type === "refusé") && !a.recupere && !a.destruction?.effectuee).length;
     const buttons = [
       { icon: "📋", label: "Pointer les arrivages", sub: "Contrôler et valider les arrivages du jour", color: "#c8a84b", badge: nbAttente || null, action: () => { setShowAccueil(false); setPageMode("arrivages"); setVue("__none__" as any); } },
-      { icon: "⚠️", label: "Litiges Moorea", sub: "Refus et réserves en attente de traitement", color: "#dc2626", badge: nbLitiges || null, action: () => { setShowAccueil(false); setVue("stock_refus" as any); setPageMode("arrivages"); } },
+      { icon: "⚠️", label: "Litiges Moorea", sub: "Refus et réserves en attente de traitement", color: "#dc2626", badge: nbLitiges || null, action: () => { setShowAccueil(false); setShowLitiges(true); } },
       { icon: "📊", label: "Rapports qualité", sub: "Historique et envoi des rapports d'agrément", color: "#16a34a", badge: null, action: () => { setShowAccueil(false); setVue("historique"); setPageMode("arrivages"); } },
       { icon: "🔍", label: "Chercher un lot", sub: "Retrouver un arrivage par produit ou numéro de lot", color: "#3b82f6", badge: null, action: () => { setShowAccueil(false); setPageMode("arrivages"); setVue("__none__" as any); setFiltersArr({ q: "", statut: "tous" }); } },
       { icon: "✦", label: "Nouveau rapport manuel", sub: "Saisir un rapport sans arrivage lié", color: "#8b5cf6", badge: null, action: () => { reset(); setRapportArrivage(null); setShowAccueil(false); setVue("form"); window.scrollTo(0, 0); } },
@@ -1933,10 +1949,7 @@ _PDF joint_`;
             Que voulez-vous faire aujourd'hui ?
           </p>
           {nbAttente > 0 && (
-            <div style={{ display: "inline-flex", alignItems: "center", gap: 8, marginTop: 16, background: "rgba(255,255,255,0.15)", border: "1px solid rgba(255,255,255,0.3)", borderRadius: 20, padding: "6px 16px" }}>
-              <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#e8c87b", flexShrink: 0, display: "inline-block" }} />
-              <span style={{ fontSize: 13, color: "#fff", fontWeight: 600 }}>{nbAttente} arrivage{nbAttente > 1 ? "s" : ""} en attente de pointage</span>
-            </div>
+            <div style={{ display: "none" }} />
           )}
 
           {/* Déconnexion discrète en haut à droite */}
@@ -1971,6 +1984,81 @@ _PDF joint_`;
               { label: "Arrivages", value: arrivages.length, color: "#c8a84b" },
               { label: "En attente", value: nbAttente, color: "#d97706" },
               { label: "Litiges", value: nbLitiges, color: "#dc2626" },
+            ].map(s => (
+              <div key={s.label} style={{ flex: 1, background: "#fff", border: "1.5px solid #e8e0d0", borderRadius: 14, padding: "14px 10px", textAlign: "center", borderTop: `3px solid ${s.color}`, boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
+                <p style={{ margin: 0, fontSize: 24, fontWeight: 800, color: s.color, letterSpacing: "-1px" }}>{s.value}</p>
+                <p style={{ margin: "2px 0 0", fontSize: 11, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.5px" }}>{s.label}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── PAGE LITIGES HUB ───
+  if (showLitiges) {
+    const nbRefusASigner = arrivages.filter(a => (a.statut === "refusé" || a.litige?.type === "refusé") && !a.recupere && !a.destruction?.effectuee).length;
+    const nbRapportsLitiges = rapports.filter(r => !r.archivé && (r.decision === "refus" || r.decision === "reserve")).length;
+    return (
+      <div style={{ minHeight: "100vh", background: "#f5f3ee", fontFamily: "'Syne', sans-serif" }}>
+        <style>{styles}</style>
+        {/* Bandeau */}
+        <div style={{ background: "linear-gradient(135deg, #7f1d1d 0%, #b91c1c 60%, #c8a84b 100%)", padding: "40px 24px 56px", textAlign: "center", position: "relative" }}>
+          <div style={{ position: "absolute", top: -40, right: -40, width: 180, height: 180, borderRadius: "50%", background: "rgba(200,168,75,0.1)", pointerEvents: "none" }} />
+          <button onClick={() => { setShowLitiges(false); setShowAccueil(true); }} style={{ position: "absolute", top: 16, left: 16, padding: "6px 12px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.3)", background: "rgba(255,255,255,0.1)", cursor: "pointer", fontSize: 12, color: "#fff", fontFamily: "'Syne', sans-serif" }}>
+            ‹ Accueil
+          </button>
+          <button onClick={() => signOut(auth)} style={{ position: "absolute", top: 16, right: 16, padding: "6px 12px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.2)", background: "rgba(255,255,255,0.08)", cursor: "pointer", fontSize: 11, color: "rgba(255,255,255,0.5)", fontFamily: "'Syne', sans-serif" }}>
+            {user?.displayName?.split(" ")[0]} · Déco
+          </button>
+          <div style={{ fontSize: 44, marginBottom: 10 }}>⚠️</div>
+          <h1 style={{ margin: 0, fontSize: 26, fontWeight: 800, color: "#fff" }}>Litiges Moorea</h1>
+          <p style={{ margin: "8px 0 0", fontSize: 14, color: "rgba(255,255,255,0.65)" }}>Gestion des refus et réserves</p>
+        </div>
+
+        {/* 2 gros boutons */}
+        <div style={{ maxWidth: 520, margin: "-24px auto 0", padding: "0 20px 60px", position: "relative" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+
+            {/* Bouton 1 : Historique rapports litiges */}
+            <button onClick={() => { setShowLitiges(false); setVue("historique"); setPageMode("arrivages"); setFilterDecision("refus"); }}
+              style={{ display: "flex", alignItems: "center", gap: 16, padding: "20px 20px", borderRadius: 16, cursor: "pointer", border: "1.5px solid #e8e0d0", background: "#fff", textAlign: "left", width: "100%", fontFamily: "'Syne', sans-serif", boxShadow: "0 2px 10px rgba(0,0,0,0.06)", transition: "all 0.15s" }}
+              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = "#dc2626"; (e.currentTarget as HTMLElement).style.boxShadow = "0 4px 20px rgba(220,38,38,0.12)"; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = "#e8e0d0"; (e.currentTarget as HTMLElement).style.boxShadow = "0 2px 10px rgba(0,0,0,0.06)"; }}
+            >
+              <span style={{ fontSize: 28, width: 52, height: 52, display: "flex", alignItems: "center", justifyContent: "center", background: "#fef2f2", borderRadius: 14, flexShrink: 0 }}>📋</span>
+              <div style={{ flex: 1 }}>
+                <p style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "#1a2e1a" }}>Historique des rapports</p>
+                <p style={{ margin: "3px 0 0", fontSize: 13, color: "#9ca3af" }}>Tous les refus et réserves enregistrés</p>
+              </div>
+              {nbRapportsLitiges > 0 && <span style={{ background: "#dc2626", color: "#fff", fontSize: 13, fontWeight: 700, padding: "4px 10px", borderRadius: 20, flexShrink: 0 }}>{nbRapportsLitiges}</span>}
+              <span style={{ color: "#d1d5db", fontSize: 18 }}>›</span>
+            </button>
+
+            {/* Bouton 2 : Refus à faire signer */}
+            <button onClick={() => { setShowLitiges(false); setVue("stock_refus" as any); setPageMode("arrivages"); }}
+              style={{ display: "flex", alignItems: "center", gap: 16, padding: "20px 20px", borderRadius: 16, cursor: "pointer", border: "1.5px solid #e8e0d0", background: "#fff", textAlign: "left", width: "100%", fontFamily: "'Syne', sans-serif", boxShadow: "0 2px 10px rgba(0,0,0,0.06)", transition: "all 0.15s" }}
+              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = "#d97706"; (e.currentTarget as HTMLElement).style.boxShadow = "0 4px 20px rgba(217,119,6,0.12)"; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = "#e8e0d0"; (e.currentTarget as HTMLElement).style.boxShadow = "0 2px 10px rgba(0,0,0,0.06)"; }}
+            >
+              <span style={{ fontSize: 28, width: 52, height: 52, display: "flex", alignItems: "center", justifyContent: "center", background: "#fffbeb", borderRadius: 14, flexShrink: 0 }}>🔄</span>
+              <div style={{ flex: 1 }}>
+                <p style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "#1a2e1a" }}>Refus à faire signer</p>
+                <p style={{ margin: "3px 0 0", fontSize: 13, color: "#9ca3af" }}>Bons de reprise transporteur en attente</p>
+              </div>
+              {nbRefusASigner > 0 && <span style={{ background: "#d97706", color: "#fff", fontSize: 13, fontWeight: 700, padding: "4px 10px", borderRadius: 20, flexShrink: 0 }}>{nbRefusASigner}</span>}
+              <span style={{ color: "#d1d5db", fontSize: 18 }}>›</span>
+            </button>
+
+          </div>
+
+          {/* Stats */}
+          <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
+            {[
+              { label: "Rapports refus", value: rapports.filter(r => r.decision === "refus").length, color: "#dc2626" },
+              { label: "Réserves", value: rapports.filter(r => r.decision === "reserve").length, color: "#d97706" },
+              { label: "À récupérer", value: nbRefusASigner, color: "#7c3aed" },
             ].map(s => (
               <div key={s.label} style={{ flex: 1, background: "#fff", border: "1.5px solid #e8e0d0", borderRadius: 14, padding: "14px 10px", textAlign: "center", borderTop: `3px solid ${s.color}`, boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
                 <p style={{ margin: 0, fontSize: 24, fontWeight: 800, color: s.color, letterSpacing: "-1px" }}>{s.value}</p>
@@ -2083,7 +2171,7 @@ _PDF joint_`;
       {/* HEADER */}
       <div style={{ background: "#0a0a0a", padding: "16px 20px", marginBottom: 0, borderBottom: "3px solid #c8a84b" }}>
         <div className="header-inner">
-          <div onClick={() => setShowAccueil(true)} style={{ cursor: "pointer" }}>
+          <div onClick={() => { setShowAccueil(true); setShowLitiges(false); }} style={{ cursor: "pointer" }}>
             <p style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 14, color: "#c8a84b", textTransform: "uppercase", letterSpacing: "1.5px", marginBottom: 2 }}>🍃 Moorea · Rapport Qualité</p>
             <p style={{ fontSize: 11, color: "rgba(255,255,255,0.4)" }}>Arrivages · Fruits & Légumes</p>
           </div>
@@ -2114,57 +2202,6 @@ _PDF joint_`;
         {/* ══ VUE ARRIVAGES ══ */}
         {pageMode === "arrivages" && vue !== "form" && vue !== "historique" && (
           <div className="fade-up">
-            {/* Scanner étiquette → recherche arrivage */}
-            <div style={{ marginBottom: 16, background: "#0a0a0a", border: "2px solid #3b82f6", borderRadius: 16, padding: "14px 20px", display: "flex", alignItems: "center", gap: 14 }}>
-              <div style={{ width: 38, height: 38, borderRadius: 10, background: "#3b82f622", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0 }}>🔍</div>
-              <div style={{ flex: 1 }}>
-                <p style={{ fontSize: 13, fontWeight: 700, color: "#93c5fd", fontFamily: "'Syne', sans-serif", margin: "0 0 2px" }}>Scanner une étiquette</p>
-                <p style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", margin: 0 }}>L'IA identifie le lot et le retrouve dans les arrivages</p>
-              </div>
-              <div>
-                <input type="file" accept="image/*" id="scan-arrivage-input" style={{ display: "none" }}
-                  onChange={async e => {
-                    const f = e.target.files?.[0]; if (!f) return;
-                    showToast("⏳ Analyse de l'étiquette…");
-                    try {
-                      const base64 = await new Promise<string>((resolve) => {
-                        const img = new Image();
-                        img.onload = () => {
-                          const canvas = document.createElement("canvas");
-                          const MAX = 800; let w = img.width, h = img.height;
-                          if (w > MAX || h > MAX) { if (w > h) { h = Math.round(h * MAX / w); w = MAX; } else { w = Math.round(w * MAX / h); h = MAX; } }
-                          canvas.width = w; canvas.height = h;
-                          canvas.getContext("2d")!.drawImage(img, 0, 0, w, h);
-                          resolve(canvas.toDataURL("image/jpeg", 0.8).split(",")[1]);
-                        };
-                        img.src = URL.createObjectURL(f);
-                      });
-                      const response = await fetch("/api/scan-etiquette", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ base64, mediaType: f.type }) });
-                      const data = await response.json();
-                      const text = data.content?.[0]?.text || "";
-                      const parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
-                      // Cherche dans les arrivages par lot ou produit
-                      const lotMatch = parsed.lotFournisseur || parsed.lot || "";
-                      const produitMatch = parsed.produit || "";
-                      const found = arrivages.find((a: any) =>
-                        (lotMatch && (a.lot_interne === lotMatch || a.lot_fournisseur === lotMatch)) ||
-                        (produitMatch && a.produit?.toLowerCase().includes(produitMatch.toLowerCase()))
-                      );
-                      if (found) {
-                        setFiltersArr({ q: found.produit, statut: "tous" });
-                        showToast(`✅ Lot trouvé : ${found.produit} · ${found.fournisseur}`);
-                      } else {
-                        setFiltersArr({ q: produitMatch || lotMatch, statut: "tous" });
-                        showToast(produitMatch ? `🔍 Recherche : ${produitMatch}` : "Lot non trouvé dans les arrivages", produitMatch ? "success" : "error");
-                      }
-                    } catch { showToast("Erreur analyse étiquette", "error"); }
-                    e.target.value = "";
-                  }} />
-                <label htmlFor="scan-arrivage-input" style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "9px 16px", background: "linear-gradient(135deg, #3b82f6, #1d4ed8)", color: "#fff", borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 700, fontFamily: "'Syne', sans-serif", boxShadow: "0 2px 8px rgba(59,130,246,0.4)" }}>
-                  📷 Scanner
-                </label>
-              </div>
-            </div>
 
             {/* Stats par jour */}
             {(() => {
@@ -2280,10 +2317,45 @@ _PDF joint_`;
               if (enAttente.length > 0) {
                 const byDate: Record<string, any[]> = {};
                 enAttente.forEach((a: any) => { const d = a.date || "—"; if (!byDate[d]) byDate[d] = []; byDate[d].push(a); });
+
+                const handleScanForDate = async (e: React.ChangeEvent<HTMLInputElement>, arrivagesDate: any[]) => {
+                  const f = e.target.files?.[0]; if (!f) return;
+                  showToast("⏳ Analyse de l'étiquette…");
+                  try {
+                    const base64 = await new Promise<string>((resolve) => {
+                      const img = new Image();
+                      img.onload = () => {
+                        const canvas = document.createElement("canvas");
+                        const MAX = 800; let w = img.width, h = img.height;
+                        if (w > MAX || h > MAX) { if (w > h) { h = Math.round(h * MAX / w); w = MAX; } else { w = Math.round(w * MAX / h); h = MAX; } }
+                        canvas.width = w; canvas.height = h;
+                        canvas.getContext("2d")!.drawImage(img, 0, 0, w, h);
+                        resolve(canvas.toDataURL("image/jpeg", 0.8).split(",")[1]);
+                      };
+                      img.src = URL.createObjectURL(f);
+                    });
+                    const response = await fetch("/api/scan-etiquette", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ base64, mediaType: f.type }) });
+                    const data = await response.json();
+                    const text = data.content?.[0]?.text || "";
+                    const parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
+                    const lotMatch = parsed.lotFournisseur || parsed.lot || "";
+                    const produitMatch = parsed.produit || "";
+                    const found = arrivagesDate.find((a: any) =>
+                      (lotMatch && (a.lot_interne === lotMatch || a.lot_fournisseur === lotMatch)) ||
+                      (produitMatch && a.produit?.toLowerCase().includes(produitMatch.toLowerCase()))
+                    );
+                    if (found) {
+                      showToast(`✅ Lot trouvé : ${found.produit} · ${found.fournisseur}`);
+                    } else {
+                      showToast("Lot non trouvé dans cette date", "error");
+                    }
+                  } catch { showToast("Erreur analyse étiquette", "error"); }
+                };
+
                 return (
                   <>
                     {Object.entries(byDate).sort((a,b)=>b[0].localeCompare(a[0])).map(([date, arr]) => (
-                      <DateBlock key={date} date={date} arrivages={arr} onValidate={handleAgrement} onDelete={deleteArrivageItem} onOuvreRapport={ouvrirRapportDepuisArrivage} selectMode={selectMode} selectedArrivages={selectedArrivages} onToggleSelect={(id: string) => { const next = new Set(selectedArrivages); if (next.has(id)) next.delete(id); else next.add(id); setSelectedArrivages(next); }} />
+                      <DateBlock key={date} date={date} arrivages={arr} onValidate={handleAgrement} onDelete={deleteArrivageItem} onOuvreRapport={ouvrirRapportDepuisArrivage} selectMode={selectMode} selectedArrivages={selectedArrivages} onToggleSelect={(id: string) => { const next = new Set(selectedArrivages); if (next.has(id)) next.delete(id); else next.add(id); setSelectedArrivages(next); }} onScan={handleScanForDate} />
                     ))}
                   </>
                 );
