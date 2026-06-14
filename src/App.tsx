@@ -441,6 +441,8 @@ export default function App() {
   const [user, setUser] = useState<any | null>(undefined);
   const [showAccueil, setShowAccueil] = useState(true);
   const [showLitiges, setShowLitiges] = useState(false);
+  const [showRecherche, setShowRecherche] = useState(false);
+  const [searchLotQuery, setSearchLotQuery] = useState("");
   const [signatureModal, setSignatureModal] = useState<any | null>(null);
   const [sigNom, setSigNom] = useState("");
   const [sigPrenom, setSigPrenom] = useState("");
@@ -1946,7 +1948,7 @@ _PDF joint_`;
       { icon: "📋", label: "Pointer arrivage", sub: "Contrôler et valider les arrivages du jour", color: "#c8a84b", badge: nbAttente || null, action: () => { setShowAccueil(false); setPageMode("arrivages"); setVue("__none__" as any); } },
       { icon: "⚠️", label: "Litiges Moorea", sub: "Refus et réserves en attente de traitement", color: "#dc2626", badge: nbLitiges || null, action: () => { setShowAccueil(false); setShowLitiges(true); } },
       { icon: "📊", label: "Rapports qualité", sub: "Historique et envoi des rapports d'agrément", color: "#16a34a", badge: null, action: () => { setShowAccueil(false); setVue("historique"); setPageMode("arrivages"); } },
-      { icon: "🔍", label: "Chercher un lot", sub: "Retrouver un arrivage par produit ou numéro de lot", color: "#3b82f6", badge: null, action: () => { setShowAccueil(false); setPageMode("arrivages"); setVue("__none__" as any); setFiltersArr({ q: "", statut: "tous" }); } },
+      { icon: "🔍", label: "Chercher un lot", sub: "Retrouver un arrivage par produit ou numéro de lot", color: "#3b82f6", badge: null, action: () => { setShowAccueil(false); setShowRecherche(true); setSearchLotQuery(""); } },
       { icon: "✦", label: "Nouveau rapport manuel", sub: "Saisir un rapport sans arrivage lié", color: "#8b5cf6", badge: null, action: () => { reset(); setRapportArrivage(null); setShowAccueil(false); setVue("form"); window.scrollTo(0, 0); } },
     ];
     return (
@@ -2089,6 +2091,170 @@ _PDF joint_`;
     );
   }
 
+  // ─── PAGE RECHERCHE LOT ───
+  if (showRecherche) {
+    const resultats = searchLotQuery.length >= 2
+      ? arrivages.filter(a =>
+          (a.lot_interne && a.lot_interne.toLowerCase().includes(searchLotQuery.toLowerCase())) ||
+          (a.produit && a.produit.toLowerCase().includes(searchLotQuery.toLowerCase())) ||
+          (a.fournisseur && a.fournisseur.toLowerCase().includes(searchLotQuery.toLowerCase()))
+        )
+      : [];
+
+    return (
+      <div style={{ minHeight: "100vh", background: "#f5f3ee", fontFamily: "'Syne', sans-serif" }}>
+        <style>{styles}</style>
+
+        {/* Bandeau */}
+        <div style={{ background: "linear-gradient(135deg, #1e3a5f 0%, #1d4ed8 60%, #3b82f6 100%)", padding: "40px 24px 56px", textAlign: "center", position: "relative" }}>
+          <button onClick={() => { setShowRecherche(false); setShowAccueil(true); }} style={{ position: "absolute", top: 16, left: 16, padding: "6px 12px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.3)", background: "rgba(255,255,255,0.1)", cursor: "pointer", fontSize: 12, color: "#fff", fontFamily: "'Syne', sans-serif" }}>
+            ‹ Accueil
+          </button>
+          <div style={{ fontSize: 44, marginBottom: 10 }}>🔍</div>
+          <h1 style={{ margin: 0, fontSize: 26, fontWeight: 800, color: "#fff" }}>Chercher un lot</h1>
+          <p style={{ margin: "8px 0 0", fontSize: 14, color: "rgba(255,255,255,0.65)" }}>N° lot, produit ou fournisseur</p>
+        </div>
+
+        <div style={{ maxWidth: 600, margin: "-24px auto 0", padding: "0 20px 60px", position: "relative" }}>
+          {/* Barre de recherche */}
+          <div style={{ background: "#fff", borderRadius: 16, padding: "16px", marginBottom: 16, boxShadow: "0 4px 20px rgba(0,0,0,0.1)" }}>
+            <input
+              value={searchLotQuery}
+              onChange={e => setSearchLotQuery(e.target.value)}
+              placeholder="Ex : 4421, Tomate, GREENYARD..."
+              autoFocus
+              style={{ width: "100%", padding: "14px 16px", border: "2px solid #3b82f6", borderRadius: 12, fontSize: 16, outline: "none", fontFamily: "'DM Sans', sans-serif", boxSizing: "border-box" }}
+            />
+            {searchLotQuery.length > 0 && searchLotQuery.length < 2 && (
+              <p style={{ margin: "8px 0 0", fontSize: 12, color: "#9ca3af" }}>Tapez au moins 2 caractères…</p>
+            )}
+            {searchLotQuery.length >= 2 && (
+              <p style={{ margin: "8px 0 0", fontSize: 12, color: "#6b7280" }}>{resultats.length} résultat{resultats.length > 1 ? "s" : ""}</p>
+            )}
+          </div>
+
+          {/* Résultats */}
+          {resultats.map(a => {
+            const rapport = rapports.find(r => r.arrivage_id === a.id);
+            return (
+              <div key={a.id} style={{ background: "#fff", borderRadius: 16, marginBottom: 14, overflow: "hidden", boxShadow: "0 2px 12px rgba(0,0,0,0.06)", borderLeft: `4px solid ${a.statut === "validé" ? "#22c55e" : a.statut === "refusé" ? "#dc2626" : a.statut === "sous réserve" ? "#d97706" : "#9ca3af"}` }}>
+
+                {/* Header lot */}
+                <div style={{ padding: "14px 18px", borderBottom: "1px solid #f5f3ee" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
+                    <div>
+                      <p style={{ margin: "0 0 4px", fontWeight: 700, fontSize: 16, color: "#1a2e1a", fontFamily: "'Syne', sans-serif" }}>{a.produit}{a.variete ? ` · ${a.variete}` : ""}</p>
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                        <PillArr>🏭 {a.fournisseur}</PillArr>
+                        <PillArr>📦 {a.quantite} {a.unite}</PillArr>
+                        {a.lot_interne && <span style={{ fontSize: 11, background: "#faf8f0", color: "#8a6f2e", border: "1px solid #e0d0a0", padding: "2px 8px", borderRadius: 20, fontWeight: 700 }}>🔖 Lot {a.lot_interne}</span>}
+                        {a.origine && <PillArr>🌍 {a.origine}</PillArr>}
+                      </div>
+                    </div>
+                    <BadgeArrivage status={a.statut} />
+                  </div>
+                  <p style={{ margin: 0, fontSize: 11, color: "#9ca3af" }}>📅 Arrivage du {a.date}</p>
+                </div>
+
+                {/* Agréage */}
+                <div style={{ padding: "12px 18px", borderBottom: "1px solid #f5f3ee", background: a.rapport ? "#faf8f3" : "#fafafa" }}>
+                  <p style={{ margin: "0 0 8px", fontSize: 11, fontWeight: 700, color: "#8a6f2e", textTransform: "uppercase", letterSpacing: "0.5px" }}>✅ Agréage</p>
+                  {a.rapport ? (
+                    <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                      <div style={{ background: "#fff", borderRadius: 10, padding: "8px 14px", border: "1px solid #e8e0d0", flex: 1, minWidth: 120 }}>
+                        <p style={{ margin: "0 0 2px", fontSize: 10, color: "#9ca3af", textTransform: "uppercase" }}>Agréeur</p>
+                        <p style={{ margin: 0, fontWeight: 700, fontSize: 14, color: "#1a2e1a" }}>{a.rapport.agreeur || "—"}</p>
+                      </div>
+                      <div style={{ background: "#fff", borderRadius: 10, padding: "8px 14px", border: "1px solid #e8e0d0", flex: 1, minWidth: 120 }}>
+                        <p style={{ margin: "0 0 2px", fontSize: 10, color: "#9ca3af", textTransform: "uppercase" }}>Heure agréage</p>
+                        <p style={{ margin: 0, fontWeight: 700, fontSize: 14, color: "#1a2e1a" }}>{a.rapport.heure_agreage || "—"}</p>
+                      </div>
+                      {a.rapport.qualite > 0 && (
+                        <div style={{ background: NOTE_COLORS[a.rapport.qualite] + "15", borderRadius: 10, padding: "8px 14px", border: `1px solid ${NOTE_COLORS[a.rapport.qualite]}44`, flex: 1, minWidth: 120 }}>
+                          <p style={{ margin: "0 0 2px", fontSize: 10, color: "#9ca3af", textTransform: "uppercase" }}>Note qualité</p>
+                          <p style={{ margin: 0, fontWeight: 700, fontSize: 14, color: NOTE_COLORS[a.rapport.qualite] }}>{a.rapport.qualite}/5 — {NOTE_LABELS[a.rapport.qualite]}</p>
+                        </div>
+                      )}
+                      {a.rapport.temperature && (
+                        <div style={{ background: "#eff6ff", borderRadius: 10, padding: "8px 14px", border: "1px solid #bfdbfe", flex: 1, minWidth: 120 }}>
+                          <p style={{ margin: "0 0 2px", fontSize: 10, color: "#9ca3af", textTransform: "uppercase" }}>Température</p>
+                          <p style={{ margin: 0, fontWeight: 700, fontSize: 14, color: "#1d4ed8" }}>🌡 {a.rapport.temperature === "ok" ? "OK" : a.rapport.temperature === "ko" ? "Non conforme" : a.rapport.temperature}</p>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <p style={{ margin: 0, fontSize: 13, color: "#9ca3af", fontStyle: "italic" }}>Pas encore agréé</p>
+                  )}
+                </div>
+
+                {/* Rapport lié */}
+                {rapport && (
+                  <div style={{ padding: "12px 18px", borderBottom: "1px solid #f5f3ee", background: "#f0fdf4" }}>
+                    <p style={{ margin: "0 0 8px", fontSize: 11, fontWeight: 700, color: "#15803d", textTransform: "uppercase", letterSpacing: "0.5px" }}>📋 Rapport qualité lié</p>
+                    <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: "#8a6f2e", background: "#faf8f0", border: "1px solid #e0d0a0", padding: "4px 10px", borderRadius: 8 }}>#{rapport.numeroRapport}</span>
+                      <span style={{ fontSize: 13, color: "#374151" }}>{rapport.date} à {rapport.heure}</span>
+                      {rapport.agreeur && <span style={{ fontSize: 13, color: "#6b7280" }}>par {rapport.agreeur}</span>}
+                      {rapport.score && <ScoreCircle score={rapport.score} />}
+                      <span className="pill" style={{ background: rapport.decision === "stock" ? "#f0fdf4" : rapport.decision === "reserve" ? "#fffbeb" : "#fef2f2", color: rapport.decision === "stock" ? "#15803d" : rapport.decision === "reserve" ? "#d97706" : "#dc2626", border: `1px solid ${rapport.decision === "stock" ? "#bbf7d0" : rapport.decision === "reserve" ? "#fcd34d" : "#fca5a5"}` }}>
+                        {rapport.decision === "stock" ? "✅ En stock" : rapport.decision === "reserve" ? "⚠️ Réserve" : "❌ Refusé"}
+                      </span>
+                      <button onClick={() => downloadPDF(rapport)} style={{ marginLeft: "auto", padding: "5px 12px", borderRadius: 8, border: "1px solid #e8e0d0", background: "#fff", color: "#8a6f2e", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>📄 PDF</button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Données de stock */}
+                <div style={{ padding: "12px 18px", background: "#fafafa" }}>
+                  <p style={{ margin: "0 0 8px", fontSize: 11, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.5px" }}>📦 Données de stock</p>
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                    <div style={{ background: "#fff", borderRadius: 10, padding: "8px 14px", border: "1px solid #e8e0d0", flex: 1, minWidth: 100 }}>
+                      <p style={{ margin: "0 0 2px", fontSize: 10, color: "#9ca3af", textTransform: "uppercase" }}>Quantité</p>
+                      <p style={{ margin: 0, fontWeight: 700, fontSize: 14, color: "#1a2e1a" }}>{a.quantite} {a.unite}</p>
+                    </div>
+                    {a.poids_net && (
+                      <div style={{ background: "#fff", borderRadius: 10, padding: "8px 14px", border: "1px solid #e8e0d0", flex: 1, minWidth: 100 }}>
+                        <p style={{ margin: "0 0 2px", fontSize: 10, color: "#9ca3af", textTransform: "uppercase" }}>Poids net</p>
+                        <p style={{ margin: 0, fontWeight: 700, fontSize: 14, color: "#1a2e1a" }}>{a.poids_net} kg</p>
+                      </div>
+                    )}
+                    {a.poids_colis && (
+                      <div style={{ background: "#fff", borderRadius: 10, padding: "8px 14px", border: "1px solid #e8e0d0", flex: 1, minWidth: 100 }}>
+                        <p style={{ margin: "0 0 2px", fontSize: 10, color: "#9ca3af", textTransform: "uppercase" }}>Poids/colis</p>
+                        <p style={{ margin: 0, fontWeight: 700, fontSize: 14, color: "#1a2e1a" }}>{a.poids_colis} kg</p>
+                      </div>
+                    )}
+                    {a.lot_fournisseur && (
+                      <div style={{ background: "#fff", borderRadius: 10, padding: "8px 14px", border: "1px solid #e8e0d0", flex: 1, minWidth: 100 }}>
+                        <p style={{ margin: "0 0 2px", fontSize: 10, color: "#9ca3af", textTransform: "uppercase" }}>Lot fournisseur</p>
+                        <p style={{ margin: 0, fontWeight: 700, fontSize: 14, color: "#1a2e1a" }}>{a.lot_fournisseur}</p>
+                      </div>
+                    )}
+                    {a.litige && (
+                      <div style={{ background: "#fef2f2", borderRadius: 10, padding: "8px 14px", border: "1px solid #fca5a5", flex: 1, minWidth: 100 }}>
+                        <p style={{ margin: "0 0 2px", fontSize: 10, color: "#dc2626", textTransform: "uppercase" }}>Litige</p>
+                        <p style={{ margin: 0, fontWeight: 700, fontSize: 13, color: "#dc2626" }}>{a.litige.raison || a.litige.type}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+              </div>
+            );
+          })}
+
+          {searchLotQuery.length >= 2 && resultats.length === 0 && (
+            <div style={{ textAlign: "center", padding: "3rem", background: "#fff", borderRadius: 20, border: "1.5px solid #e8e0d0" }}>
+              <div style={{ fontSize: 36, marginBottom: 10 }}>🔎</div>
+              <p style={{ margin: 0, fontWeight: 700, color: "#374151" }}>Aucun résultat pour « {searchLotQuery} »</p>
+              <p style={{ margin: "6px 0 0", fontSize: 13, color: "#9ca3af" }}>Essaie avec le numéro de lot, le produit ou le fournisseur</p>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="app">
       <style>{styles}</style>
@@ -2189,7 +2355,7 @@ _PDF joint_`;
       {/* HEADER */}
       <div style={{ background: "#0a0a0a", padding: "14px 20px", marginBottom: 0, borderBottom: "3px solid #c8a84b" }}>
         <div className="header-inner">
-          <div onClick={() => { setShowAccueil(true); setShowLitiges(false); }} style={{ cursor: "pointer" }}>
+          <div onClick={() => { setShowAccueil(true); setShowLitiges(false); setShowRecherche(false); }} style={{ cursor: "pointer" }}>
             <p style={{ fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: 15, color: "#c8a84b", textTransform: "uppercase", letterSpacing: "2px", marginBottom: 2 }}>🍃 Moorea</p>
             <p style={{ fontSize: 11, color: "rgba(255,255,255,0.4)" }}>
               {vue === "form" ? "Nouveau rapport" :
@@ -2203,7 +2369,7 @@ _PDF joint_`;
                "Hub Moorea"}
             </p>
           </div>
-          <button onClick={() => { setShowAccueil(true); setShowLitiges(false); }} style={{ padding: "9px 18px", borderRadius: 10, border: "none", background: "#c8a84b", cursor: "pointer", fontSize: 13, fontWeight: 700, color: "#0a0a0a", fontFamily: "'Syne', sans-serif", whiteSpace: "nowrap" }}>
+          <button onClick={() => { setShowAccueil(true); setShowLitiges(false); setShowRecherche(false); }} style={{ padding: "9px 18px", borderRadius: 10, border: "none", background: "#c8a84b", cursor: "pointer", fontSize: 13, fontWeight: 700, color: "#0a0a0a", fontFamily: "'Syne', sans-serif", whiteSpace: "nowrap" }}>
             🏠 Accueil
           </button>
           <button onClick={() => signOut(auth)} title={user.email} style={{ padding: "8px 12px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.06)", cursor: "pointer", fontSize: 12, color: "rgba(255,255,255,0.5)", fontFamily: "'Syne', sans-serif", whiteSpace: "nowrap" }}>
