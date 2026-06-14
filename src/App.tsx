@@ -1922,7 +1922,7 @@ _PDF joint_`;
     <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "#0a0a0a", padding: 24 }}>
       <div style={{ marginBottom: 32, textAlign: "center" }}>
         <div style={{ fontSize: 40, fontWeight: 800, color: "#c8a84b", fontFamily: "'Syne', sans-serif", letterSpacing: 2 }}>MOOREA</div>
-        <div style={{ fontSize: 14, color: "rgba(255,255,255,0.5)", marginTop: 6 }}>Contrôle Qualité · Agréage Rungis</div>
+        <div style={{ fontSize: 14, color: "rgba(255,255,255,0.5)", marginTop: 6 }}>Hub · Agréage Rungis</div>
       </div>
       <button onClick={loginGoogle} style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 28px", borderRadius: 14, border: "none", background: "#fff", cursor: "pointer", fontSize: 15, fontWeight: 600, color: "#1a1a1a", fontFamily: "'Syne', sans-serif", boxShadow: "0 4px 20px rgba(0,0,0,0.3)" }}>
         <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#4285F4" d="M44.5 20H24v8.5h11.8C34.7 33.9 30.1 37 24 37c-7.2 0-13-5.8-13-13s5.8-13 13-13c3.1 0 5.9 1.1 8.1 2.9l6.4-6.4C34.6 4.1 29.6 2 24 2 11.8 2 2 11.8 2 24s9.8 22 22 22c11 0 21-8 21-22 0-1.3-.2-2.7-.5-4z"/><path fill="#34A853" d="M6.3 14.7l7 5.1C15 16.1 19.1 13 24 13c3.1 0 5.9 1.1 8.1 2.9l6.4-6.4C34.6 4.1 29.6 2 24 2 16.3 2 9.7 7.4 6.3 14.7z"/><path fill="#FBBC05" d="M24 46c5.9 0 10.9-2 14.6-5.4l-6.7-5.5C29.8 36.8 27 38 24 38c-6 0-11.1-4-12.9-9.6l-7 5.4C7.8 41.4 15.4 46 24 46z"/><path fill="#EA4335" d="M44.5 20H24v8.5h11.8c-1 2.8-2.9 5.1-5.3 6.6l6.7 5.5C41 37.1 45 31.1 45 24c0-1.3-.2-2.7-.5-4z"/></svg>
@@ -2187,13 +2187,23 @@ _PDF joint_`;
       )}
 
       {/* HEADER */}
-      <div style={{ background: "#0a0a0a", padding: "16px 20px", marginBottom: 0, borderBottom: "3px solid #c8a84b" }}>
+      <div style={{ background: "#0a0a0a", padding: "14px 20px", marginBottom: 0, borderBottom: "3px solid #c8a84b" }}>
         <div className="header-inner">
           <div onClick={() => { setShowAccueil(true); setShowLitiges(false); }} style={{ cursor: "pointer" }}>
-            <p style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 14, color: "#c8a84b", textTransform: "uppercase", letterSpacing: "1.5px", marginBottom: 2 }}>🍃 Moorea · Rapport Qualité</p>
-            <p style={{ fontSize: 11, color: "rgba(255,255,255,0.4)" }}>Arrivages · Fruits & Légumes</p>
+            <p style={{ fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: 15, color: "#c8a84b", textTransform: "uppercase", letterSpacing: "2px", marginBottom: 2 }}>🍃 Moorea</p>
+            <p style={{ fontSize: 11, color: "rgba(255,255,255,0.4)" }}>
+              {vue === "form" ? "Nouveau rapport" :
+               vue === "historique" ? "Rapports qualité" :
+               vue === "archives" ? "Archives" :
+               (vue as any) === "stock_refus" ? "Stock refus" :
+               pageMode === "arrivages" ? "Pointer arrivage" :
+               pageMode === "saisie_arr" ? "Nouvel arrivage" :
+               pageMode === "historique_arr" ? "Historique arrivages" :
+               pageMode === "stats_arr" ? "Statistiques" :
+               "Hub Moorea"}
+            </p>
           </div>
-          <button onClick={() => { setShowAccueil(true); setShowLitiges(false); }} style={{ padding: "8px 14px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.06)", cursor: "pointer", fontSize: 12, color: "rgba(255,255,255,0.5)", fontFamily: "'Syne', sans-serif", whiteSpace: "nowrap" }}>
+          <button onClick={() => { setShowAccueil(true); setShowLitiges(false); }} style={{ padding: "9px 18px", borderRadius: 10, border: "none", background: "#c8a84b", cursor: "pointer", fontSize: 13, fontWeight: 700, color: "#0a0a0a", fontFamily: "'Syne', sans-serif", whiteSpace: "nowrap" }}>
             🏠 Accueil
           </button>
           <button onClick={() => signOut(auth)} title={user.email} style={{ padding: "8px 12px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.06)", cursor: "pointer", fontSize: 12, color: "rgba(255,255,255,0.5)", fontFamily: "'Syne', sans-serif", whiteSpace: "nowrap" }}>
