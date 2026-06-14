@@ -2022,7 +2022,7 @@ _PDF joint_`;
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
 
             {/* Bouton 1 : Historique rapports litiges */}
-            <button onClick={() => { setShowLitiges(false); setVue("historique"); setPageMode("arrivages"); setFilterDecision("refus"); }}
+            <button onClick={() => { setShowLitiges(false); setVue("historique"); setPageMode("arrivages"); setFilterDecision(""); setSortBy("decision"); }}
               style={{ display: "flex", alignItems: "center", gap: 16, padding: "20px 20px", borderRadius: 16, cursor: "pointer", border: "1.5px solid #e8e0d0", background: "#fff", textAlign: "left", width: "100%", fontFamily: "'Syne', sans-serif", boxShadow: "0 2px 10px rgba(0,0,0,0.06)", transition: "all 0.15s" }}
               onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = "#dc2626"; (e.currentTarget as HTMLElement).style.boxShadow = "0 4px 20px rgba(220,38,38,0.12)"; }}
               onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = "#e8e0d0"; (e.currentTarget as HTMLElement).style.boxShadow = "0 2px 10px rgba(0,0,0,0.06)"; }}
@@ -2037,7 +2037,7 @@ _PDF joint_`;
             </button>
 
             {/* Bouton 2 : Refus à faire signer */}
-            <button onClick={() => { setShowLitiges(false); setVue("stock_refus" as any); setPageMode("arrivages"); }}
+            <button onClick={() => { setShowLitiges(false); setVue("historique"); setPageMode("arrivages"); setFilterDecision("refus"); setSortBy("date_desc"); }}
               style={{ display: "flex", alignItems: "center", gap: 16, padding: "20px 20px", borderRadius: 16, cursor: "pointer", border: "1.5px solid #e8e0d0", background: "#fff", textAlign: "left", width: "100%", fontFamily: "'Syne', sans-serif", boxShadow: "0 2px 10px rgba(0,0,0,0.06)", transition: "all 0.15s" }}
               onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = "#d97706"; (e.currentTarget as HTMLElement).style.boxShadow = "0 4px 20px rgba(217,119,6,0.12)"; }}
               onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = "#e8e0d0"; (e.currentTarget as HTMLElement).style.boxShadow = "0 2px 10px rgba(0,0,0,0.06)"; }}
@@ -2175,22 +2175,9 @@ _PDF joint_`;
             <p style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 14, color: "#c8a84b", textTransform: "uppercase", letterSpacing: "1.5px", marginBottom: 2 }}>🍃 Moorea · Rapport Qualité</p>
             <p style={{ fontSize: 11, color: "rgba(255,255,255,0.4)" }}>Arrivages · Fruits & Légumes</p>
           </div>
-          <div style={{ display: "flex", gap: 4, background: "rgba(255,255,255,0.06)", padding: 4, borderRadius: 12, flexShrink: 0, flexWrap: "wrap" }}>
-            {[
-              ["arrivages_tab", "📋 Arrivages"],
-              ["historique", "Rapports"],
-              ["stock_refus_tab", `🔴 Stock Refus${arrivages.filter(a => a.statut === "refusé" && !a.recupere && !a.destruction?.recupere).length > 0 ? ` (${arrivages.filter(a => a.statut === "refusé" && !a.recupere && !a.destruction?.recupere).length})` : ""}`],
-            ].map(([v, label]) => {
-              const isActive = (v === "arrivages_tab" && (pageMode === "arrivages" || pageMode === "saisie_arr" || pageMode === "historique_arr" || pageMode === "stats_arr") && vue !== "form" && vue !== "historique" && vue !== "stock_refus") || (v === "historique" && vue === "historique") || (v === "stock_refus_tab" && vue === "stock_refus");
-              return (
-                <button key={v} onClick={() => {
-                  if (v === "arrivages_tab") { setPageMode("arrivages"); setVue("__none__" as any); }
-                  else if (v === "historique") { setVue("historique"); setPageMode("arrivages"); }
-                  else if (v === "stock_refus_tab") { setVue("stock_refus" as any); setPageMode("arrivages"); }
-                }} style={{ padding: "9px 14px", borderRadius: 9, cursor: "pointer", fontSize: 13, fontWeight: isActive ? 700 : 400, fontFamily: "'Syne', sans-serif", background: isActive ? (v === "stock_refus_tab" ? "#dc2626" : "#c8a84b") : "transparent", color: isActive ? "#fff" : "rgba(255,255,255,0.6)", border: "none", transition: "all 0.2s", touchAction: "manipulation", whiteSpace: "nowrap" }}>{label}</button>
-              );
-            })}
-          </div>
+          <button onClick={() => { setShowAccueil(true); setShowLitiges(false); }} style={{ padding: "8px 14px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.06)", cursor: "pointer", fontSize: 12, color: "rgba(255,255,255,0.5)", fontFamily: "'Syne', sans-serif", whiteSpace: "nowrap" }}>
+            🏠 Accueil
+          </button>
           <button onClick={() => signOut(auth)} title={user.email} style={{ padding: "8px 12px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.06)", cursor: "pointer", fontSize: 12, color: "rgba(255,255,255,0.5)", fontFamily: "'Syne', sans-serif", whiteSpace: "nowrap" }}>
             {user.displayName?.split(" ")[0] || user.email?.split("@")[0]} · Déco
           </button>
