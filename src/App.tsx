@@ -318,7 +318,7 @@ function FournisseurBlock({ fournisseur, produits, onValidate, onDelete, onOuvre
   );
 }
 
-function DateBlock({ date, arrivages, onValidate, onDelete, onOuvreRapport, selectMode, selectedArrivages, onToggleSelect, onScan }: any) {
+function DateBlock({ date, arrivages, arrivagesArchives, onValidate, onDelete, onOuvreRapport, selectMode, selectedArrivages, onToggleSelect, onScan }: any) {
   const today = new Date().toLocaleDateString("fr-FR");
   const [open, setOpen] = useState(date === today);
   const scanInputId = `scan-date-${date.replace(/\//g, "-")}`;
@@ -352,8 +352,26 @@ function DateBlock({ date, arrivages, onValidate, onDelete, onOuvreRapport, sele
               📷 Scanner
             </label>
           </div>
-          {/* Fournisseurs */}
+          {/* Fournisseurs en attente */}
           {Object.entries(byFournisseur).map(([f, p]) => <FournisseurBlock key={f} fournisseur={f} produits={p} onValidate={onValidate} onDelete={onDelete} onOuvreRapport={onOuvreRapport} selectMode={selectMode} selectedArrivages={selectedArrivages} onToggleSelect={onToggleSelect} />)}
+          {/* Archivés du jour */}
+          {arrivagesArchives?.length > 0 && (
+            <div style={{ marginTop: 10, borderTop: "1px solid rgba(255,255,255,0.1)", paddingTop: 10 }}>
+              <p style={{ fontWeight: 700, fontSize: 11, color: "rgba(255,255,255,0.4)", margin: "0 0 8px", textTransform: "uppercase", letterSpacing: "0.8px" }}>📁 Traités · {arrivagesArchives.length}</p>
+              {arrivagesArchives.map((a: any) => (
+                <div key={a.id} style={{ background: "rgba(255,255,255,0.06)", borderRadius: 10, padding: "8px 12px", marginBottom: 6, display: "flex", justifyContent: "space-between", alignItems: "center", borderLeft: `3px solid ${a.statut==="validé"?"#27ae60":a.statut==="refusé"?"#dc2626":"#d97706"}` }}>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ margin: "0 0 1px", fontSize: 13, fontWeight: 600, color: "#fff" }}>{a.produit} · {a.fournisseur}</p>
+                    <p style={{ margin: 0, fontSize: 11, color: "rgba(255,255,255,0.4)" }}>{a.litige?.raison ? a.litige.raison : a.rapport?.qualite ? `Note ${a.rapport.qualite}/5` : ""}</p>
+                  </div>
+                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    <BadgeArrivage status={a.statut} />
+                    <button onClick={() => onDelete(a.id)} style={{ background: "transparent", border: "1px solid rgba(252,165,165,0.4)", color: "#fca5a5", borderRadius: 8, padding: "3px 7px", cursor: "pointer", fontSize: 11 }}>🗑</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -1925,7 +1943,7 @@ _PDF joint_`;
     const nbAttente = arrivages.filter(a => a.statut === "en attente").length;
     const nbLitiges = arrivages.filter(a => (a.statut === "refusé" || a.litige?.type === "refusé") && !a.recupere && !a.destruction?.effectuee).length;
     const buttons = [
-      { icon: "📋", label: "Pointer les arrivages", sub: "Contrôler et valider les arrivages du jour", color: "#c8a84b", badge: nbAttente || null, action: () => { setShowAccueil(false); setPageMode("arrivages"); setVue("__none__" as any); } },
+      { icon: "📋", label: "Pointer arrivage", sub: "Contrôler et valider les arrivages du jour", color: "#c8a84b", badge: nbAttente || null, action: () => { setShowAccueil(false); setPageMode("arrivages"); setVue("__none__" as any); } },
       { icon: "⚠️", label: "Litiges Moorea", sub: "Refus et réserves en attente de traitement", color: "#dc2626", badge: nbLitiges || null, action: () => { setShowAccueil(false); setShowLitiges(true); } },
       { icon: "📊", label: "Rapports qualité", sub: "Historique et envoi des rapports d'agrément", color: "#16a34a", badge: null, action: () => { setShowAccueil(false); setVue("historique"); setPageMode("arrivages"); } },
       { icon: "🔍", label: "Chercher un lot", sub: "Retrouver un arrivage par produit ou numéro de lot", color: "#3b82f6", badge: null, action: () => { setShowAccueil(false); setPageMode("arrivages"); setVue("__none__" as any); setFiltersArr({ q: "", statut: "tous" }); } },
@@ -2255,7 +2273,6 @@ _PDF joint_`;
                 📊 Import
                 <input type="file" accept=".xlsx,.xls,.pdf" onChange={handleExcelArr} style={{ display: "none" }} />
               </label>
-              <button onClick={() => setHorsListeMode(true)} style={{ padding: "10px 14px", borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 700, border: "1.5px solid #ffcc80", background: "#fff3e0", color: "#e65100", fontFamily: "'Syne', sans-serif", whiteSpace: "nowrap" }}>⚠️ Hors liste</button>
               <input value={filtersArr.q} onChange={e => setFiltersArr({...filtersArr, q:e.target.value})} placeholder="🔍 Produit ou fournisseur..." style={{ flex: 1, minWidth: 140, padding: "10px 12px", border: "1.5px solid #e8e0d0", borderRadius: 10, fontSize: 14, outline: "none", boxSizing: "border-box" as const }} />
               <button onClick={() => { setSelectMode(!selectMode); setSelectedArrivages(new Set()); }} style={{ padding: "10px 14px", borderRadius: 10, border: `1.5px solid ${selectMode ? "#fca5a5" : "#e8e0d0"}`, background: selectMode ? "#fef2f2" : "#fff", cursor: "pointer", fontSize: 13, fontWeight: 700, color: selectMode ? "#dc2626" : "#6b7280", whiteSpace: "nowrap" }}>
                 {selectMode ? "✕" : "☑"}
@@ -2339,46 +2356,18 @@ _PDF joint_`;
                   } catch { showToast("Erreur analyse étiquette", "error"); }
                 };
 
+                const allArchives = arrivages.filter(a => a.statut !== "en attente");
                 return (
                   <>
                     {Object.entries(byDate).sort((a,b)=>b[0].localeCompare(a[0])).map(([date, arr]) => (
-                      <DateBlock key={date} date={date} arrivages={arr} onValidate={handleAgrement} onDelete={deleteArrivageItem} onOuvreRapport={ouvrirRapportDepuisArrivage} selectMode={selectMode} selectedArrivages={selectedArrivages} onToggleSelect={(id: string) => { const next = new Set(selectedArrivages); if (next.has(id)) next.delete(id); else next.add(id); setSelectedArrivages(next); }} onScan={handleScanForDate} />
+                      <DateBlock key={date} date={date} arrivages={arr} arrivagesArchives={allArchives.filter((a: any) => a.date === date && (!filtersArr.q || `${a.produit} ${a.fournisseur}`.toLowerCase().includes(filtersArr.q.toLowerCase())))} onValidate={handleAgrement} onDelete={deleteArrivageItem} onOuvreRapport={ouvrirRapportDepuisArrivage} selectMode={selectMode} selectedArrivages={selectedArrivages} onToggleSelect={(id: string) => { const next = new Set(selectedArrivages); if (next.has(id)) next.delete(id); else next.add(id); setSelectedArrivages(next); }} onScan={handleScanForDate} />
                     ))}
                   </>
                 );
               }
               return null;
             })()}
-            {/* Archivés */}
-            {(() => {
-              const archivesFiltered = arrivages.filter(a => a.statut !== "en attente" && (!filtersArr.q || `${a.produit} ${a.fournisseur}`.toLowerCase().includes(filtersArr.q.toLowerCase())) && (filtersArr.statut === "tous" || a.statut === filtersArr.statut));
-              if (!archivesFiltered.length) return null;
-              return (<>
-                <p style={{ fontWeight: 700, fontSize: 12, color: "#6b7280", margin: "24px 0 10px", textTransform: "uppercase", letterSpacing: "0.8px", fontFamily: "'Syne', sans-serif" }}>📁 Archivés · {archivesFiltered.length}</p>
-                {archivesFiltered.slice(0,15).map(a => (
-                  <div key={a.id} style={{ background: selectedArrivages.has(a.id) ? "#fef2f2" : "#fff", borderRadius: 12, padding: "10px 16px", marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: "0 1px 6px rgba(0,0,0,0.04)", borderLeft: `3px solid ${a.statut==="validé"?"#27ae60":a.statut==="refusé"?"#dc2626":"#d97706"}`, border: selectedArrivages.has(a.id) ? "1.5px solid #fca5a5" : undefined }}>
-                    {selectMode && (
-                      <input type="checkbox" checked={selectedArrivages.has(a.id)}
-                        onChange={e => {
-                          const next = new Set(selectedArrivages);
-                          if (e.target.checked) next.add(a.id); else next.delete(a.id);
-                          setSelectedArrivages(next);
-                        }}
-                        style={{ width: 18, height: 18, cursor: "pointer", marginRight: 10, flexShrink: 0 }}
-                      />
-                    )}
-                    <div style={{ flex: 1 }}>
-                      <p style={{ margin: "0 0 2px", fontSize: 13, fontWeight: 600, color: "#1a2e1a" }}>{a.produit} · {a.fournisseur}{a.hors_liste ? <span style={{ marginLeft: 8, fontSize: 10, background: "#fff3e0", color: "#e65100", padding: "1px 6px", borderRadius: 10, fontWeight: 600 }}>Hors liste</span> : null}</p>
-                      <p style={{ margin: 0, fontSize: 11, color: "#6b7280" }}>{a.date}{a.rapport?.qualite ? ` · Note ${a.rapport.qualite}/5` : ""}{a.litige?.raison ? ` · ${a.litige.raison}` : ""}</p>
-                    </div>
-                    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                      <BadgeArrivage status={a.statut} />
-                      <button onClick={() => deleteArrivageItem(a.id)} style={{ background: "transparent", border: "1px solid #fca5a5", color: "#dc2626", borderRadius: 8, padding: "3px 7px", cursor: "pointer", fontSize: 11 }}>🗑</button>
-                    </div>
-                  </div>
-                ))}
-              </>);
-            })()}
+            {/* fin accordéons */}
           </div>
         )}
 
