@@ -379,6 +379,11 @@ function DateBlock({ date, arrivages, arrivagesArchives, onValidate, onDelete, o
   const [open, setOpen] = useState(date === today);
   const [validatingAll, setValidatingAll] = useState(false);
   const scanInputId = `scan-date-${date.replace(/\//g, "-")}`;
+  const totalArticles = arrivages.length + (arrivagesArchives?.length || 0);
+  const nbTraites = arrivagesArchives?.length || 0;
+  const allFournisseurs: Record<string, boolean> = {};
+  [...arrivages, ...(arrivagesArchives || [])].forEach((a: any) => { allFournisseurs[a.fournisseur] = true; });
+  const nbFourn = Object.keys(allFournisseurs).length;
   const byFournisseur: Record<string, any[]> = {};
   arrivages.forEach((a: any) => { if (!byFournisseur[a.fournisseur]) byFournisseur[a.fournisseur] = []; byFournisseur[a.fournisseur].push(a); });
 
@@ -400,13 +405,20 @@ function DateBlock({ date, arrivages, arrivagesArchives, onValidate, onDelete, o
           <div style={{ width: 34, height: 34, borderRadius: 9, background: "#c8a84b22", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, flexShrink: 0 }}>📅</div>
           <div>
             <p style={{ margin: 0, fontWeight: 700, fontSize: 14, color: "#c8a84b", fontFamily: "'Syne', sans-serif" }}>{date}</p>
-            <p style={{ margin: 0, fontSize: 11, color: "rgba(255,255,255,0.5)" }}>{Object.keys((() => { const m: Record<string,boolean> = {}; arrivages.forEach((a:any) => { m[a.fournisseur]=true; }); return m; })()).length} fournisseur{Object.keys((() => { const m: Record<string,boolean> = {}; arrivages.forEach((a:any) => { m[a.fournisseur]=true; }); return m; })()).length > 1 ? "s" : ""}</p>
+            <p style={{ margin: 0, fontSize: 11, color: "rgba(255,255,255,0.5)" }}>{nbFourn} fournisseur{nbFourn > 1 ? "s" : ""}</p>
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ fontSize: 12, background: "#d97706", color: "#fff", padding: "4px 12px", borderRadius: 20, fontWeight: 700 }}>
-            {arrivages.length} article{arrivages.length > 1 ? "s" : ""}
-          </span>
+          {arrivages.length > 0 && (
+            <span style={{ fontSize: 12, background: "#d97706", color: "#fff", padding: "4px 10px", borderRadius: 20, fontWeight: 700 }}>
+              {arrivages.length} en attente
+            </span>
+          )}
+          {nbTraites > 0 && (
+            <span style={{ fontSize: 12, background: "#27ae60", color: "#fff", padding: "4px 10px", borderRadius: 20, fontWeight: 700 }}>
+              {nbTraites} traité{nbTraites > 1 ? "s" : ""}
+            </span>
+          )}
           <span style={{ fontSize: 18, color: "#c8a84b", fontWeight: 700, transform: open ? "rotate(90deg)" : "none", transition: "transform 0.2s", display: "inline-block" }}>›</span>
         </div>
       </div>
@@ -3841,61 +3853,60 @@ _PDF joint_`;
             )}
             {/* Accordéon date/fournisseur */}
             {(() => {
-              const enAttente = arrivages.filter(a => a.statut === "en attente" && (!filtersArr.q || `${a.produit} ${a.fournisseur}`.toLowerCase().includes(filtersArr.q.toLowerCase())));
-              if (enAttente.length === 0 && arrivages.filter(a=>a.statut==="en attente").length === 0) return (
+              const filtered = arrivages.filter(a => !filtersArr.q || `${a.produit} ${a.fournisseur}`.toLowerCase().includes(filtersArr.q.toLowerCase()));
+              if (filtered.length === 0 && arrivages.length === 0) return (
                 <div style={{ textAlign: "center", padding: "3rem", background: "#eafaf1", border: "1px solid #d4edda", borderRadius: 20 }}>
-                  <div style={{ fontSize: 36, marginBottom: 10 }}>✅</div>
-                  <p style={{ margin: 0, fontWeight: 700, color: "#1a6b3a", fontFamily: "'Syne', sans-serif" }}>Tout est traité !</p>
+                  <div style={{ fontSize: 36, marginBottom: 10 }}>📋</div>
+                  <p style={{ margin: 0, fontWeight: 700, color: "#1a6b3a", fontFamily: "'Syne', sans-serif" }}>Aucun arrivage importé</p>
                 </div>
               );
-              if (enAttente.length > 0) {
-                const byDate: Record<string, any[]> = {};
-                enAttente.forEach((a: any) => { const d = a.date || "—"; if (!byDate[d]) byDate[d] = []; byDate[d].push(a); });
 
-                const handleScanForDate = async (e: React.ChangeEvent<HTMLInputElement>, arrivagesDate: any[]) => {
-                  const f = e.target.files?.[0]; if (!f) return;
-                  showToast("⏳ Analyse de l'étiquette…");
-                  try {
-                    const base64 = await new Promise<string>((resolve) => {
-                      const img = new Image();
-                      img.onload = () => {
-                        const canvas = document.createElement("canvas");
-                        const MAX = 800; let w = img.width, h = img.height;
-                        if (w > MAX || h > MAX) { if (w > h) { h = Math.round(h * MAX / w); w = MAX; } else { w = Math.round(w * MAX / h); h = MAX; } }
-                        canvas.width = w; canvas.height = h;
-                        canvas.getContext("2d")!.drawImage(img, 0, 0, w, h);
-                        resolve(canvas.toDataURL("image/jpeg", 0.8).split(",")[1]);
-                      };
-                      img.src = URL.createObjectURL(f);
-                    });
-                    const response = await fetch("/api/scan-etiquette", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ base64, mediaType: f.type }) });
-                    const data = await response.json();
-                    const text = data.content?.[0]?.text || "";
-                    const parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
-                    const lotMatch = parsed.lotFournisseur || parsed.lot || "";
-                    const produitMatch = parsed.produit || "";
-                    const found = arrivagesDate.find((a: any) =>
-                      (lotMatch && (a.lot_interne === lotMatch || a.lot_fournisseur === lotMatch)) ||
-                      (produitMatch && a.produit?.toLowerCase().includes(produitMatch.toLowerCase()))
+              // Grouper tous les arrivages par date
+              const byDate: Record<string, any[]> = {};
+              filtered.forEach((a: any) => { const d = a.date || "—"; if (!byDate[d]) byDate[d] = []; byDate[d].push(a); });
+
+              const handleScanForDate = async (e: React.ChangeEvent<HTMLInputElement>, arrivagesDate: any[]) => {
+                const f = e.target.files?.[0]; if (!f) return;
+                showToast("⏳ Analyse de l'étiquette…");
+                try {
+                  const base64 = await new Promise<string>((resolve) => {
+                    const img = new Image();
+                    img.onload = () => {
+                      const canvas = document.createElement("canvas");
+                      const MAX = 800; let w = img.width, h = img.height;
+                      if (w > MAX || h > MAX) { if (w > h) { h = Math.round(h * MAX / w); w = MAX; } else { w = Math.round(w * MAX / h); h = MAX; } }
+                      canvas.width = w; canvas.height = h;
+                      canvas.getContext("2d")!.drawImage(img, 0, 0, w, h);
+                      resolve(canvas.toDataURL("image/jpeg", 0.8).split(",")[1]);
+                    };
+                    img.src = URL.createObjectURL(f);
+                  });
+                  const response = await fetch("/api/scan-etiquette", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ base64, mediaType: f.type }) });
+                  const data = await response.json();
+                  const text = data.content?.[0]?.text || "";
+                  const parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
+                  const lotMatch = parsed.lotFournisseur || parsed.lot || "";
+                  const produitMatch = parsed.produit || "";
+                  const found = arrivagesDate.find((a: any) =>
+                    (lotMatch && (a.lot_interne === lotMatch || a.lot_fournisseur === lotMatch)) ||
+                    (produitMatch && a.produit?.toLowerCase().includes(produitMatch.toLowerCase()))
+                  );
+                  if (found) showToast(`✅ Lot trouvé : ${found.produit} · ${found.fournisseur}`);
+                  else showToast("Lot non trouvé dans cette date", "error");
+                } catch { showToast("Erreur analyse étiquette", "error"); }
+              };
+
+              return (
+                <>
+                  {Object.entries(byDate).sort((a,b)=>b[0].localeCompare(a[0])).map(([date, arr]) => {
+                    const enAttente = arr.filter((a: any) => a.statut === "en attente");
+                    const traites = arr.filter((a: any) => a.statut !== "en attente");
+                    return (
+                      <DateBlock key={date} date={date} arrivages={enAttente} arrivagesArchives={traites} onValidate={handleAgrement} onDelete={deleteArrivageItem} onOuvreRapport={ouvrirRapportDepuisArrivage} selectMode={selectMode} selectedArrivages={selectedArrivages} onToggleSelect={(id: string) => { const next = new Set(selectedArrivages); if (next.has(id)) next.delete(id); else next.add(id); setSelectedArrivages(next); }} onScan={handleScanForDate} />
                     );
-                    if (found) {
-                      showToast(`✅ Lot trouvé : ${found.produit} · ${found.fournisseur}`);
-                    } else {
-                      showToast("Lot non trouvé dans cette date", "error");
-                    }
-                  } catch { showToast("Erreur analyse étiquette", "error"); }
-                };
-
-                const allArchives = arrivages.filter(a => a.statut !== "en attente");
-                return (
-                  <>
-                    {Object.entries(byDate).sort((a,b)=>b[0].localeCompare(a[0])).map(([date, arr]) => (
-                      <DateBlock key={date} date={date} arrivages={arr} arrivagesArchives={allArchives.filter((a: any) => a.date === date && (!filtersArr.q || `${a.produit} ${a.fournisseur}`.toLowerCase().includes(filtersArr.q.toLowerCase())))} onValidate={handleAgrement} onDelete={deleteArrivageItem} onOuvreRapport={ouvrirRapportDepuisArrivage} selectMode={selectMode} selectedArrivages={selectedArrivages} onToggleSelect={(id: string) => { const next = new Set(selectedArrivages); if (next.has(id)) next.delete(id); else next.add(id); setSelectedArrivages(next); }} onScan={handleScanForDate} />
-                    ))}
-                  </>
-                );
-              }
-              return null;
+                  })}
+                </>
+              );
             })()}
             {/* fin accordéons */}
           </div>
