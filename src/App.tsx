@@ -232,6 +232,8 @@ function ProduitRow({ arrivage, onValidate, onDelete, onOuvreRapport, selectMode
   const [poidsBrut, setPoidsBrut] = useState<string>(arrivage.poids_brut || "");
   const [poidsNet, setPoidsNet] = useState<string>(arrivage.poids_net || arrivage.poids_colis || "");
   const [saving, setSaving] = useState(false);
+  const [showEtiquette, setShowEtiquette] = useState(false);
+  const [arrivageValide, setArrivageValide] = useState<any>(null);
 
   const colisAttendu = arrivage.quantite || 0;
   const colisRecusNum = colisRecus === "" ? colisAttendu : parseInt(colisRecus) || 0;
@@ -247,12 +249,38 @@ function ProduitRow({ arrivage, onValidate, onDelete, onOuvreRapport, selectMode
       poidsNet ? `Poids net : ${poidsNet} kg` : "",
     ].filter(Boolean).join(" | ");
     const ctrl = { qualite, temperature: tempOk ? "ok" : "ko", poids_mesure: poidsOk ? "ok" : "ko", poids_brut: poidsBrut, poids_net: poidsNet, observations: obs };
+    const arrivageAvecPoids = { ...arrivage, poids_brut: poidsBrut || arrivage.poids_brut, poids_net: poidsNet || arrivage.poids_net };
     await onValidate(arrivage, ctrl, hasLitige ? "non_conforme" : "conforme", hasLitige ? "sous réserve" : "", hasEcartColis ? `Écart colis : ${ecartColis > 0 ? "+" : ""}${ecartColis} (reçu ${colisRecusNum}/${colisAttendu})` : "", "");
     setSaving(false);
+    setArrivageValide(arrivageAvecPoids);
+    setShowEtiquette(true);
     if (hasLitige) onOuvreRapport(arrivage, true);
   };
 
   const statusColor = (litige || hasEcartColis) ? "#dc2626" : qualite >= 4 ? "#27ae60" : qualite === 3 ? "#d97706" : "#dc2626";
+
+  if (showEtiquette && arrivageValide) {
+    return (
+      <div style={{ background: "#fff", borderRadius: 14, padding: 20, marginBottom: 8, border: "2px solid #c8a84b", boxShadow: "0 4px 20px rgba(200,168,75,0.2)" }}>
+        <div style={{ textAlign: "center", marginBottom: 16 }}>
+          <div style={{ fontSize: 36, marginBottom: 8 }}>✅</div>
+          <p style={{ margin: "0 0 4px", fontWeight: 800, fontSize: 15, color: "#1a2e1a", fontFamily: "'Syne', sans-serif" }}>{arrivageValide.produit} validé</p>
+          <p style={{ margin: 0, fontSize: 12, color: "#9ca3af" }}>Lot #{arrivageValide.lot_interne} · {arrivageValide.fournisseur}</p>
+        </div>
+        <p style={{ margin: "0 0 12px", fontSize: 13, fontWeight: 700, color: "#374151", textAlign: "center" }}>🏷 Imprimer l'étiquette palette ?</p>
+        <div style={{ display: "flex", gap: 10 }}>
+          <button onClick={() => { imprimerEtiquettePalette(arrivageValide); setShowEtiquette(false); }}
+            style={{ flex: 1, padding: "12px", borderRadius: 12, border: "none", background: "#c8a84b", color: "#0a0a0a", cursor: "pointer", fontSize: 14, fontWeight: 800, fontFamily: "'Syne', sans-serif" }}>
+            🖨 Oui, imprimer
+          </button>
+          <button onClick={() => setShowEtiquette(false)}
+            style={{ flex: 1, padding: "12px", borderRadius: 12, border: "1.5px solid #e8e0d0", background: "#f9fafb", color: "#6b7280", cursor: "pointer", fontSize: 14, fontWeight: 600, fontFamily: "'Syne', sans-serif" }}>
+            Non merci
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ background: selected ? "#fef2f2" : "#fff", borderRadius: 12, padding: "12px 16px", marginBottom: 8, border: `1.5px solid ${selected ? "#fca5a5" : (litige || hasEcartColis) ? "#fca5a5" : "#d4edda"}`, borderLeft: `4px solid ${statusColor}` }}>
@@ -387,49 +415,59 @@ function FournisseurBlock({ fournisseur, produits, onValidate, onDelete, onOuvre
 async function imprimerEtiquettePalette(arrivage: any) {
   const lot = arrivage.lot_interne || arrivage.id;
   const url = `${window.location.origin}${window.location.pathname}?lot=${lot}`;
-  const qrUrl = `https://chart.googleapis.com/chart?chs=180x180&cht=qr&chl=${encodeURIComponent(url)}&choe=UTF-8`;
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Palette #${lot}</title>
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"><\/script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:Arial,Helvetica,sans-serif;background:#fff;display:flex;justify-content:center;align-items:flex-start;padding:20px;min-height:100vh}
-.etiquette{width:148mm;min-height:105mm;background:#FFE600;border:3px solid #222;padding:6mm;position:relative;page-break-inside:avoid}
-.lot{font-size:36px;font-weight:900;color:#000;letter-spacing:1px;line-height:1;margin-bottom:4mm;border-bottom:2px solid #000;padding-bottom:3mm}
-.produit{font-size:20px;font-weight:700;color:#000;margin-bottom:2mm}
-.fourn{font-size:16px;font-weight:400;color:#111;margin-bottom:4mm}
+body{font-family:Arial Black,Arial,sans-serif;background:#fff;display:flex;justify-content:center;padding:20px}
+.etiquette{width:200mm;min-height:140mm;background:#FFE600;border:4px solid #000;padding:8mm;display:flex;flex-direction:column;gap:5mm}
+.lot{font-size:52px;font-weight:900;color:#000;letter-spacing:2px;border-bottom:3px solid #000;padding-bottom:4mm}
+.produit{font-size:28px;font-weight:900;color:#000;line-height:1.2}
+.fourn{font-size:22px;font-weight:700;color:#000}
+.infos{display:grid;grid-template-columns:1fr 1fr;gap:3mm}
+.info-cell{background:rgba(0,0,0,0.08);border-radius:3px;padding:3mm 4mm}
+.info-lbl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#333}
+.info-val{font-size:20px;font-weight:900;color:#000}
 .bottom{display:flex;justify-content:space-between;align-items:flex-end;margin-top:auto}
-.qty-block .qty{font-size:48px;font-weight:900;color:#000;line-height:1}
-.qty-block .unite{font-size:16px;font-weight:600;color:#333;margin-top:1mm}
-.infos{font-size:11px;color:#333;margin-bottom:3mm;line-height:1.6}
-.infos span{font-weight:700;color:#000}
+.qty{font-size:80px;font-weight:900;color:#000;line-height:1}
+.unite{font-size:24px;font-weight:700;color:#000;margin-top:2mm}
 .qr-block{text-align:right}
-.qr-block img{width:100px;height:100px;border:2px solid #000}
-.qr-block p{font-size:8px;color:#555;margin-top:1mm}
-.btn-print{position:fixed;top:14px;right:14px;padding:9px 18px;background:#222;color:#FFE600;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:14px}
-@media print{.btn-print{display:none}body{padding:0}}</style>
-</head><body>
-<button class="btn-print" onclick="window.print()">🖨 Imprimer</button>
+.qr-block canvas{border:3px solid #000}
+.qr-block p{font-size:11px;font-weight:700;color:#000;margin-top:2mm;text-align:center}
+.btn-print{position:fixed;top:10px;right:10px;padding:9px 18px;background:#000;color:#FFE600;border:none;border-radius:8px;font-weight:900;cursor:pointer;font-size:14px}
+@media print{.btn-print{display:none}body{padding:0}}
+</style></head><body>
+<button class="btn-print" onclick="window.print()">IMPRIMER</button>
 <div class="etiquette">
   <div class="lot">MRA.${String(lot).padStart(4,"0")}</div>
-  <div class="produit">${arrivage.produit || "—"}</div>
-  <div class="fourn">${arrivage.fournisseur || "—"}</div>
+  <div class="produit">${(arrivage.produit || "—").toUpperCase()}</div>
+  <div class="fourn">${(arrivage.fournisseur || "—").toUpperCase()}</div>
   <div class="infos">
-    📅 <span>${arrivage.date || "—"}</span> &nbsp;|&nbsp;
-    🌍 <span>${arrivage.origine || "—"}</span> &nbsp;|&nbsp;
-    🏷 Lot fourn. <span>${arrivage.lot_fournisseur || "—"}</span><br>
-    ⚖️ Brut <span>${arrivage.poids_brut || "—"} kg</span> &nbsp;|&nbsp;
-    🥬 Net <span>${arrivage.poids_net || "—"} kg</span>
+    <div class="info-cell"><div class="info-lbl">DATE ARRIVEE</div><div class="info-val">${arrivage.date || "—"}</div></div>
+    <div class="info-cell"><div class="info-lbl">ORIGINE</div><div class="info-val">${(arrivage.origine || "—").toUpperCase()}</div></div>
+    <div class="info-cell"><div class="info-lbl">POIDS BRUT</div><div class="info-val">${arrivage.poids_brut || "—"} KG</div></div>
+    <div class="info-cell"><div class="info-lbl">POIDS NET</div><div class="info-val">${arrivage.poids_net || "—"} KG</div></div>
+    <div class="info-cell"><div class="info-lbl">LOT FOURNISSEUR</div><div class="info-val">${arrivage.lot_fournisseur || "—"}</div></div>
+    <div class="info-cell"><div class="info-lbl">LOT INTERNE</div><div class="info-val">${lot}</div></div>
   </div>
   <div class="bottom">
-    <div class="qty-block">
+    <div>
       <div class="qty">${arrivage.quantite || "—"}</div>
-      <div class="unite">${arrivage.unite || "colis"}</div>
+      <div class="unite">${(arrivage.unite || "COLIS").toUpperCase()}</div>
     </div>
     <div class="qr-block">
-      <img src="${qrUrl}" alt="QR"/>
-      <p>Scan → fiche palette</p>
+      <canvas id="qr"></canvas>
+      <p>SCANNER → FICHE PALETTE</p>
     </div>
   </div>
 </div>
+<script>
+window.onload = function() {
+  QRCode.toCanvas(document.getElementById('qr'), '${url}', {
+    width: 130, margin: 1, color: { dark: '#000000', light: '#FFE600' }
+  });
+};
+<\/script>
 </body></html>`;
   const w = window.open("", "_blank");
   if (w) { w.document.write(html); w.document.close(); }
@@ -1094,6 +1132,48 @@ function StockApp({ onExit }: { onExit: () => void }) {
       <button class="nav-btn hidden" id="s-nav-comptage" onclick="sShowPage('comptage')">📋 Comptage</button>
       <button class="nav-btn hidden" id="s-nav-ecarts" onclick="sShowPage('ecarts')">📊 Écarts</button>
       <button class="nav-btn" id="s-nav-config" onclick="sShowPage('config')">⚙️ Configuration</button>
+      <button class="nav-btn" onclick="sScannerPalette()">📷 Scanner</button>
+    </div>
+  </div>
+
+  <!-- PAGE SCANNER STOCK -->
+  <div id="s-page-scanner" style="display:none;position:fixed;inset:0;background:#000;z-index:800;flex-direction:column">
+    <div style="background:#0a0a0a;padding:14px 20px;display:flex;align-items:center;gap:12px;border-bottom:2px solid #c8a84b;flex-shrink:0">
+      <button onclick="sFermerScanner()" style="padding:7px 14px;border-radius:9px;border:none;background:#c8a84b;cursor:pointer;font-size:12px;font-weight:700;color:#0a0a0a">✕ Fermer</button>
+      <p style="margin:0;font-weight:800;font-size:15px;color:#c8a84b;text-transform:uppercase;letter-spacing:1px">📷 Scanner palette → Stock</p>
+    </div>
+    <div style="flex:1;position:relative;display:flex;align-items:center;justify-content:center">
+      <video id="s-scan-video" style="width:100%;height:100%;object-fit:cover" playsinline muted></video>
+      <canvas id="s-scan-canvas" style="display:none"></canvas>
+      <!-- Viseur -->
+      <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none">
+        <div style="width:240px;height:240px;position:relative">
+          <div style="position:absolute;top:0;left:0;width:40px;height:40px;border-top:4px solid #c8a84b;border-left:4px solid #c8a84b;border-radius:4px 0 0 0"></div>
+          <div style="position:absolute;top:0;right:0;width:40px;height:40px;border-top:4px solid #c8a84b;border-right:4px solid #c8a84b;border-radius:0 4px 0 0"></div>
+          <div style="position:absolute;bottom:0;left:0;width:40px;height:40px;border-bottom:4px solid #c8a84b;border-left:4px solid #c8a84b;border-radius:0 0 0 4px"></div>
+          <div style="position:absolute;bottom:0;right:0;width:40px;height:40px;border-bottom:4px solid #c8a84b;border-right:4px solid #c8a84b;border-radius:0 0 4px 0"></div>
+          <div id="s-scan-line" style="position:absolute;left:0;right:0;height:2px;background:#c8a84b;top:50%;animation:s-scan 2s linear infinite"></div>
+        </div>
+      </div>
+      <style>@keyframes s-scan{0%{transform:translateY(-120px);opacity:1}50%{opacity:.5}100%{transform:translateY(120px);opacity:1}}</style>
+      <!-- Résultat scan -->
+      <div id="s-scan-result" style="display:none;position:absolute;inset:0;background:rgba(0,0,0,0.85);align-items:center;justify-content:center;padding:20px">
+        <div style="background:#fff;border-radius:20px;padding:24px;width:100%;max-width:400px;text-align:center">
+          <div id="s-scan-result-content"></div>
+          <button onclick="sRescanPalette()" style="margin-top:16px;width:100%;padding:12px;border-radius:10px;border:none;background:#c8a84b;color:#0a0a0a;font-weight:700;font-size:14px;cursor:pointer">📷 Scanner une autre palette</button>
+          <button onclick="sFermerScanner()" style="margin-top:8px;width:100%;padding:10px;border-radius:10px;border:1.5px solid #e8e0d0;background:#fff;color:#6b7280;font-size:13px;cursor:pointer">Fermer</button>
+        </div>
+      </div>
+      <div id="s-scan-error" style="display:none;position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:24px">
+        <div style="background:#fff;border-radius:16px;padding:24px;text-align:center;max-width:320px">
+          <div style="font-size:40px;margin-bottom:12px">📷</div>
+          <p style="font-weight:700;color:#dc2626;margin-bottom:8px">Caméra indisponible</p>
+          <p id="s-scan-error-msg" style="font-size:13px;color:#6b7280"></p>
+        </div>
+      </div>
+    </div>
+    <div style="background:#0a0a0a;padding:14px 20px;text-align:center;flex-shrink:0">
+      <p style="margin:0;font-size:13px;color:rgba(255,255,255,0.6)">Pointez la caméra vers le QR code de la palette</p>
     </div>
   </div>
 
@@ -2188,6 +2268,110 @@ function StockApp({ onExit }: { onExit: () => void }) {
         sRenderConfig();
       };
 
+      // ── Scanner palette dans stock ──
+      let sScanStream: MediaStream | null = null;
+      let sScanRaf = 0;
+      let sScanActive = false;
+
+      const loadJsQRStock = (): Promise<any> => new Promise((res, rej) => {
+        if ((window as any).jsQR) { res((window as any).jsQR); return; }
+        const s = document.createElement("script");
+        s.src = "https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js";
+        s.onload = () => res((window as any).jsQR); s.onerror = rej;
+        document.head.appendChild(s);
+      });
+
+      (window as any).sScannerPalette = async () => {
+        const page = document.getElementById("s-page-scanner");
+        if (!page) return;
+        page.style.display = "flex";
+        document.getElementById("s-scan-result")!.style.display = "none";
+        (document.getElementById("s-scan-error") as HTMLElement).style.display = "none";
+        sScanActive = true;
+        try {
+          const jsQR = await loadJsQRStock();
+          const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } } });
+          sScanStream = stream;
+          const video = document.getElementById("s-scan-video") as HTMLVideoElement;
+          video.srcObject = stream; await video.play();
+          const canvas = document.getElementById("s-scan-canvas") as HTMLCanvasElement;
+          const tick = () => {
+            if (!sScanActive) return;
+            if (video.readyState !== video.HAVE_ENOUGH_DATA) { sScanRaf = requestAnimationFrame(tick); return; }
+            canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+            const ctx = canvas.getContext("2d")!; ctx.drawImage(video, 0, 0);
+            const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const code = jsQR(img.data, img.width, img.height, { inversionAttempts: "dontInvert" });
+            if (code) {
+              sScanActive = false; stream.getTracks().forEach(t => t.stop()); cancelAnimationFrame(sScanRaf);
+              let lot = "";
+              try { const u = new URL(code.data); lot = u.searchParams.get("lot") || ""; } catch {}
+              if (!lot && /^\d{3,6}$/.test(code.data.trim())) lot = code.data.trim();
+              if (!lot) { (window as any).sAfficherResultatScan({ found: false, msg: "QR non reconnu" }); return; }
+              (window as any).sVerifierLotDansStock(lot); return;
+            }
+            sScanRaf = requestAnimationFrame(tick);
+          };
+          sScanRaf = requestAnimationFrame(tick);
+        } catch (e: any) {
+          const errEl = document.getElementById("s-scan-error") as HTMLElement;
+          const msgEl = document.getElementById("s-scan-error-msg");
+          if (errEl) errEl.style.display = "flex";
+          if (msgEl) msgEl.textContent = e.name === "NotAllowedError" ? "Accès caméra refusé" : e.message;
+        }
+      };
+
+      (window as any).sVerifierLotDansStock = (lot: string) => {
+        const findArt = (list: any[]) => list.find((a: any) => (a.lots || []).includes(lot) || (a.lotsQty && Object.keys(a.lotsQty).includes(lot)));
+        const artSession = findArt(articles);
+        const artAll = artSession || findArt(allArticles);
+        if (!artAll) { (window as any).sAfficherResultatScan({ found: false, msg: `Lot #${lot} introuvable dans ce stock` }); return; }
+        const enSession = !!artSession;
+        const art = artSession || artAll;
+        const compte = enSession && art.compte !== null && art.compte !== undefined ? art.compte : null;
+        const stock = art.nb_colis;
+        const ecart = compte !== null ? compte - stock : null;
+        const ec = ecart === null ? "#6b7280" : ecart < 0 ? "#dc2626" : ecart > 0 ? "#d97706" : "#16a34a";
+        const html = `
+          <div style="font-size:32px;margin-bottom:8px">${enSession ? (compte !== null ? "✅" : "⏳") : "📦"}</div>
+          <p style="font-size:18px;font-weight:800;color:#1a2e1a;margin:0 0 4px">${art.article}</p>
+          <p style="font-size:13px;color:#6b7280;margin:0 0 16px">Lot #${lot} · ${art.famille || ""}</p>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+            <div style="background:#f9fafb;border-radius:10px;padding:10px">
+              <p style="margin:0 0 2px;font-size:10px;color:#9ca3af;text-transform:uppercase">Stock sys.</p>
+              <p style="margin:0;font-size:20px;font-weight:800;color:#374151">${stock}</p>
+            </div>
+            <div style="background:${compte !== null ? ec + "18" : "#f9fafb"};border-radius:10px;padding:10px;border:${compte !== null ? `1.5px solid ${ec}` : "none"}">
+              <p style="margin:0 0 2px;font-size:10px;color:#9ca3af;text-transform:uppercase">Compté</p>
+              <p style="margin:0;font-size:20px;font-weight:800;color:${ec}">${compte !== null ? compte : "—"}</p>
+            </div>
+          </div>
+          ${ecart !== null ? `<div style="background:${ec}18;border-radius:10px;padding:10px;border:1.5px solid ${ec};margin-bottom:12px">
+            <p style="margin:0;font-size:14px;font-weight:700;color:${ec}">Écart : ${ecart > 0 ? "+" : ""}${ecart} ${ecart === 0 ? "— OK ✓" : ecart < 0 ? "manquant" + (Math.abs(ecart) > 1 ? "s" : "") : "surplus"}</p>
+          </div>` : ""}
+          ${!enSession ? `<div style="background:#fffbeb;border-radius:10px;padding:10px;border:1px solid #fde68a">
+            <p style="margin:0;font-size:12px;color:#d97706;font-weight:600">⚠️ Article ${getEquipe(artAll)} — pas dans la session ${currentTeam || "en cours"}</p>
+          </div>` : compte === null ? `<div style="background:#eff6ff;border-radius:10px;padding:10px;border:1px solid #bfdbfe">
+            <p style="margin:0;font-size:12px;color:#1d4ed8;font-weight:600">📋 Dans la liste mais pas encore compté</p>
+          </div>` : ""}`;
+        (window as any).sAfficherResultatScan({ found: true, html });
+      };
+
+      (window as any).sAfficherResultatScan = ({ found, msg, html }: any) => {
+        const res = document.getElementById("s-scan-result");
+        const content = document.getElementById("s-scan-result-content");
+        if (!res || !content) return;
+        content.innerHTML = found ? html : `<div style="font-size:36px;margin-bottom:12px">🔎</div><p style="font-weight:700;color:#dc2626;margin-bottom:6px">Introuvable</p><p style="font-size:13px;color:#6b7280">${msg}</p>`;
+        res.style.display = "flex";
+      };
+      (window as any).sRescanPalette = () => { document.getElementById("s-scan-result")!.style.display = "none"; sScanActive = true; (window as any).sScannerPalette(); };
+      (window as any).sFermerScanner = () => {
+        sScanActive = false; cancelAnimationFrame(sScanRaf);
+        sScanStream?.getTracks().forEach(t => t.stop()); sScanStream = null;
+        const page = document.getElementById("s-page-scanner");
+        if (page) page.style.display = "none";
+      };
+
       // Load histo on session start
       loadHistoArticles();
       (window as any).sShowPage("home");
@@ -2195,7 +2379,7 @@ function StockApp({ onExit }: { onExit: () => void }) {
 
     return () => {
       // Cleanup global functions
-      ["sShowPage","sStartSession","sRecompterDepuis","sSetCount","sAddLoc","sTerminerComptage","sResetCounts","sMoveToOther","sChanterFichier","sAddArticleManuel","sSearchAddArticle","sSelectAddArt","sRecupererArticle","sSetEF","sRenderEcarts","sRenderTable","sExportCSV","sExportPDF","sPrintPDF","sCloturerStock","sDupliquer","sDeleteStock","sCheckPin","sSetCF","sRenderConfig","sToggleEquipe","sToggleFusionMode","sToggleFusionSelect","sConfirmerFusion","sAnnulerFusion","sCalcNum","sCalcOp","sCalcEqual","sCalcClear","sCalcUse","sOptimiserOrdre"].forEach(fn => { delete (window as any)[fn]; });
+      ["sShowPage","sStartSession","sRecompterDepuis","sSetCount","sAddLoc","sTerminerComptage","sResetCounts","sMoveToOther","sChanterFichier","sAddArticleManuel","sSearchAddArticle","sSelectAddArt","sRecupererArticle","sSetEF","sRenderEcarts","sRenderTable","sExportCSV","sExportPDF","sPrintPDF","sCloturerStock","sDupliquer","sDeleteStock","sCheckPin","sSetCF","sRenderConfig","sToggleEquipe","sToggleFusionMode","sToggleFusionSelect","sConfirmerFusion","sAnnulerFusion","sCalcNum","sCalcOp","sCalcEqual","sCalcClear","sCalcUse","sOptimiserOrdre","sScannerPalette","sVerifierLotDansStock","sAfficherResultatScan","sRescanPalette","sFermerScanner"].forEach(fn => { delete (window as any)[fn]; });
       const styleEl = document.getElementById("stock-app-styles");
       if (styleEl) styleEl.remove();
     };
