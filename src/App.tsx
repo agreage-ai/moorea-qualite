@@ -388,31 +388,37 @@ async function imprimerEtiquettePalette(arrivage: any) {
   const lot = arrivage.lot_interne || arrivage.id;
   const url = `${window.location.origin}${window.location.pathname}?id=${arrivage.id}`;
 
-  // Ouvrir la fenêtre IMMÉDIATEMENT (synchrone) avant tout await
+  // Ouvrir la fenêtre synchrone avant tout await
   const w = window.open("", "_blank");
   if (!w) { alert("Autorise les popups pour imprimer l'étiquette"); return; }
+  w.document.write(`<html><body style="background:#FFE600;display:flex;align-items:center;justify-content:center;height:100vh;font-family:Arial;font-size:20px;font-weight:900">⏳ Génération...</body></html>`);
 
-  // Afficher un loader pendant la génération du QR
-  w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Palette #${lot}</title></head><body style="font-family:Arial;display:flex;align-items:center;justify-content:center;height:100vh;background:#FFE600;color:#000;font-size:20px;font-weight:900">⏳ Génération de l'étiquette...</body></html>`);
+  // Générer QR en SVG via l'API publique qrserver.com
+  const qrSvgUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(url)}&bgcolor=FFE600&color=000000&margin=4`;
 
-  // Générer le QR code en base64
+  // Convertir en base64 via canvas dans la fenêtre principale
   let qrDataUrl = "";
   try {
-    qrDataUrl = await new Promise<string>((resolve, reject) => {
-      const load = () => new Promise<any>((res, rej) => {
-        if ((window as any).QRCode) { res((window as any).QRCode); return; }
-        const s = document.createElement("script");
-        s.src = "https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js";
-        s.onload = () => res((window as any).QRCode);
-        s.onerror = rej;
-        document.head.appendChild(s);
-      });
-      load().then((QRCode: any) => {
-        QRCode.toDataURL(url, { width: 200, margin: 1, color: { dark: "#000000", light: "#FFE600" } })
-          .then(resolve).catch(reject);
-      }).catch(reject);
+    qrDataUrl = await new Promise<string>((resolve) => {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = 200; canvas.height = 200;
+        const ctx = canvas.getContext("2d")!;
+        ctx.drawImage(img, 0, 0, 200, 200);
+        resolve(canvas.toDataURL("image/png"));
+      };
+      img.onerror = () => resolve("");
+      img.src = qrSvgUrl;
+      // Timeout 5s
+      setTimeout(() => resolve(""), 5000);
     });
   } catch { qrDataUrl = ""; }
+
+  const qrHtml = qrDataUrl
+    ? `<img src="${qrDataUrl}" style="width:130px;height:130px;border:3px solid #000" />`
+    : `<img src="${qrSvgUrl}" style="width:130px;height:130px;border:3px solid #000" onerror="this.style.display='none'" />`;
 
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Palette #${lot}</title>
 <style>
@@ -430,7 +436,6 @@ body{font-family:Arial Black,Arial,sans-serif;background:#fff;display:flex;justi
 .qty{font-size:80px;font-weight:900;color:#000;line-height:1}
 .unite{font-size:24px;font-weight:700;color:#000;margin-top:2mm}
 .qr-block{text-align:right}
-.qr-block img{width:130px;height:130px;border:3px solid #000}
 .qr-block p{font-size:11px;font-weight:700;color:#000;margin-top:2mm;text-align:center}
 .btn-print{position:fixed;top:10px;right:10px;padding:9px 18px;background:#000;color:#FFE600;border:none;border-radius:8px;font-weight:900;cursor:pointer;font-size:14px}
 @media print{.btn-print{display:none}body{padding:0}}
@@ -454,7 +459,7 @@ body{font-family:Arial Black,Arial,sans-serif;background:#fff;display:flex;justi
       <div class="unite">${(arrivage.unite || "COLIS").toUpperCase()}</div>
     </div>
     <div class="qr-block">
-      ${qrDataUrl ? `<img src="${qrDataUrl}" alt="QR Code" />` : `<div style="width:130px;height:130px;border:3px solid #000;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700">QR INDISPO</div>`}
+      ${qrHtml}
       <p>SCANNER → FICHE PALETTE</p>
     </div>
   </div>
