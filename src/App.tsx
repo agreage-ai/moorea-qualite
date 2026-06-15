@@ -465,59 +465,6 @@ body{font-family:Arial Black,Arial,sans-serif;background:#fff;display:flex;justi
   w.document.write(html);
   w.document.close();
 }
-
-  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Palette #${lot}</title>
-<style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:Arial Black,Arial,sans-serif;background:#fff;display:flex;justify-content:center;padding:20px}
-.etiquette{width:200mm;min-height:140mm;background:#FFE600;border:4px solid #000;padding:8mm;display:flex;flex-direction:column;gap:5mm}
-.lot{font-size:52px;font-weight:900;color:#000;letter-spacing:2px;border-bottom:3px solid #000;padding-bottom:4mm}
-.produit{font-size:28px;font-weight:900;color:#000;line-height:1.2}
-.fourn{font-size:22px;font-weight:700;color:#000}
-.infos{display:grid;grid-template-columns:1fr 1fr;gap:3mm}
-.info-cell{background:rgba(0,0,0,0.08);border-radius:3px;padding:3mm 4mm}
-.info-lbl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#333}
-.info-val{font-size:20px;font-weight:900;color:#000}
-.bottom{display:flex;justify-content:space-between;align-items:flex-end;margin-top:auto}
-.qty{font-size:80px;font-weight:900;color:#000;line-height:1}
-.unite{font-size:24px;font-weight:700;color:#000;margin-top:2mm}
-.qr-block{text-align:right}
-.qr-block img{width:130px;height:130px;border:3px solid #000}
-.qr-block p{font-size:11px;font-weight:700;color:#000;margin-top:2mm;text-align:center}
-.btn-print{position:fixed;top:10px;right:10px;padding:9px 18px;background:#000;color:#FFE600;border:none;border-radius:8px;font-weight:900;cursor:pointer;font-size:14px}
-@media print{.btn-print{display:none}body{padding:0}}
-</style></head><body>
-<button class="btn-print" onclick="window.print()">IMPRIMER</button>
-<div class="etiquette">
-  <div class="lot">MRA.${String(lot).padStart(4,"0")}</div>
-  <div class="produit">${(arrivage.produit || "—").toUpperCase()}</div>
-  <div class="fourn">${(arrivage.fournisseur || "—").toUpperCase()}</div>
-  <div class="infos">
-    <div class="info-cell"><div class="info-lbl">DATE ARRIVEE</div><div class="info-val">${arrivage.date || "—"}</div></div>
-    <div class="info-cell"><div class="info-lbl">ORIGINE</div><div class="info-val">${(arrivage.origine || "—").toUpperCase()}</div></div>
-    <div class="info-cell"><div class="info-lbl">POIDS BRUT</div><div class="info-val">${arrivage.poids_brut || "—"} KG</div></div>
-    <div class="info-cell"><div class="info-lbl">POIDS NET</div><div class="info-val">${arrivage.poids_net || "—"} KG</div></div>
-    <div class="info-cell"><div class="info-lbl">LOT FOURNISSEUR</div><div class="info-val">${arrivage.lot_fournisseur || "—"}</div></div>
-    <div class="info-cell"><div class="info-lbl">LOT INTERNE</div><div class="info-val">${lot}</div></div>
-  </div>
-  <div class="bottom">
-    <div>
-      <div class="qty">${arrivage.quantite || "—"}</div>
-      <div class="unite">${(arrivage.unite || "COLIS").toUpperCase()}</div>
-    </div>
-    <div class="qr-block">
-      <img src="${qrDataUrl}" alt="QR Code" />
-      <p>SCANNER → FICHE PALETTE</p>
-    </div>
-  </div>
-</div>
-</body></html>`;
-
-  w.document.open();
-  w.document.write(html);
-  w.document.close();
-}
-
 // ─── FORMULAIRE PERTE DEPUIS SCAN ───
 function PalettePerteForm({ arrivage }: { arrivage: any }) {
   const [perteQty, setPerteQty] = useState("");
