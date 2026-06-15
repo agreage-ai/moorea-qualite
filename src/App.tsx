@@ -572,7 +572,7 @@ function ScannerQR({ onScan, onClose }: { onScan: (lot: string) => void; onClose
             // Extraire le lot de l'URL
             try {
               const url = new URL(code.data);
-              const lot = url.searchParams.get("lot");
+              const lot = url.searchParams.get("id") || url.searchParams.get("lot");
               if (lot) { active = false; onScan(lot); return; }
             } catch {
               // Si c'est juste un numéro de lot direct
@@ -2433,7 +2433,7 @@ function StockApp({ onExit }: { onExit: () => void }) {
             if (code) {
               sScanActive = false; stream.getTracks().forEach(t => t.stop()); cancelAnimationFrame(sScanRaf);
               let lot = "";
-              try { const u = new URL(code.data); lot = u.searchParams.get("lot") || ""; } catch {}
+              try { const u = new URL(code.data); lot = u.searchParams.get("id") || u.searchParams.get("lot") || ""; } catch {}
               if (!lot && /^\d{3,6}$/.test(code.data.trim())) lot = code.data.trim();
               if (!lot) { (window as any).sAfficherResultatScan({ found: false, msg: "QR non reconnu" }); return; }
               (window as any).sVerifierLotDansStock(lot); return;
