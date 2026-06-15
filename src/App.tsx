@@ -388,21 +388,83 @@ async function imprimerEtiquettePalette(arrivage: any) {
   const lot = arrivage.lot_interne || arrivage.id;
   const url = `${window.location.origin}${window.location.pathname}?id=${arrivage.id}`;
 
-  // Génération QR code en base64 directement dans React
-  const qrDataUrl: string = await new Promise((resolve, reject) => {
-    const loadQR = () => new Promise<any>((res, rej) => {
-      if ((window as any).QRCode) { res((window as any).QRCode); return; }
-      const s = document.createElement("script");
-      s.src = "https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js";
-      s.onload = () => res((window as any).QRCode);
-      s.onerror = rej;
-      document.head.appendChild(s);
+  // Ouvrir la fenêtre IMMÉDIATEMENT (synchrone) avant tout await
+  const w = window.open("", "_blank");
+  if (!w) { alert("Autorise les popups pour imprimer l'étiquette"); return; }
+
+  // Afficher un loader pendant la génération du QR
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Palette #${lot}</title></head><body style="font-family:Arial;display:flex;align-items:center;justify-content:center;height:100vh;background:#FFE600;color:#000;font-size:20px;font-weight:900">⏳ Génération de l'étiquette...</body></html>`);
+
+  // Générer le QR code en base64
+  let qrDataUrl = "";
+  try {
+    qrDataUrl = await new Promise<string>((resolve, reject) => {
+      const load = () => new Promise<any>((res, rej) => {
+        if ((window as any).QRCode) { res((window as any).QRCode); return; }
+        const s = document.createElement("script");
+        s.src = "https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js";
+        s.onload = () => res((window as any).QRCode);
+        s.onerror = rej;
+        document.head.appendChild(s);
+      });
+      load().then((QRCode: any) => {
+        QRCode.toDataURL(url, { width: 200, margin: 1, color: { dark: "#000000", light: "#FFE600" } })
+          .then(resolve).catch(reject);
+      }).catch(reject);
     });
-    loadQR().then((QRCode: any) => {
-      QRCode.toDataURL(url, { width: 200, margin: 1, color: { dark: "#000000", light: "#FFE600" } })
-        .then(resolve).catch(reject);
-    }).catch(reject);
-  });
+  } catch { qrDataUrl = ""; }
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Palette #${lot}</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:Arial Black,Arial,sans-serif;background:#fff;display:flex;justify-content:center;padding:20px}
+.etiquette{width:200mm;min-height:140mm;background:#FFE600;border:4px solid #000;padding:8mm;display:flex;flex-direction:column;gap:5mm}
+.lot{font-size:52px;font-weight:900;color:#000;letter-spacing:2px;border-bottom:3px solid #000;padding-bottom:4mm}
+.produit{font-size:28px;font-weight:900;color:#000;line-height:1.2}
+.fourn{font-size:22px;font-weight:700;color:#000}
+.infos{display:grid;grid-template-columns:1fr 1fr;gap:3mm}
+.info-cell{background:rgba(0,0,0,0.08);border-radius:3px;padding:3mm 4mm}
+.info-lbl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#333}
+.info-val{font-size:20px;font-weight:900;color:#000}
+.bottom{display:flex;justify-content:space-between;align-items:flex-end;margin-top:auto}
+.qty{font-size:80px;font-weight:900;color:#000;line-height:1}
+.unite{font-size:24px;font-weight:700;color:#000;margin-top:2mm}
+.qr-block{text-align:right}
+.qr-block img{width:130px;height:130px;border:3px solid #000}
+.qr-block p{font-size:11px;font-weight:700;color:#000;margin-top:2mm;text-align:center}
+.btn-print{position:fixed;top:10px;right:10px;padding:9px 18px;background:#000;color:#FFE600;border:none;border-radius:8px;font-weight:900;cursor:pointer;font-size:14px}
+@media print{.btn-print{display:none}body{padding:0}}
+</style></head><body>
+<button class="btn-print" onclick="window.print()">IMPRIMER</button>
+<div class="etiquette">
+  <div class="lot">MRA.${String(lot).padStart(4,"0")}</div>
+  <div class="produit">${(arrivage.produit || "—").toUpperCase()}</div>
+  <div class="fourn">${(arrivage.fournisseur || "—").toUpperCase()}</div>
+  <div class="infos">
+    <div class="info-cell"><div class="info-lbl">DATE ARRIVEE</div><div class="info-val">${arrivage.date || "—"}</div></div>
+    <div class="info-cell"><div class="info-lbl">ORIGINE</div><div class="info-val">${(arrivage.origine || "—").toUpperCase()}</div></div>
+    <div class="info-cell"><div class="info-lbl">POIDS BRUT</div><div class="info-val">${arrivage.poids_brut || "—"} KG</div></div>
+    <div class="info-cell"><div class="info-lbl">POIDS NET</div><div class="info-val">${arrivage.poids_net || "—"} KG</div></div>
+    <div class="info-cell"><div class="info-lbl">LOT FOURNISSEUR</div><div class="info-val">${arrivage.lot_fournisseur || "—"}</div></div>
+    <div class="info-cell"><div class="info-lbl">LOT INTERNE</div><div class="info-val">${lot}</div></div>
+  </div>
+  <div class="bottom">
+    <div>
+      <div class="qty">${arrivage.quantite || "—"}</div>
+      <div class="unite">${(arrivage.unite || "COLIS").toUpperCase()}</div>
+    </div>
+    <div class="qr-block">
+      ${qrDataUrl ? `<img src="${qrDataUrl}" alt="QR Code" />` : `<div style="width:130px;height:130px;border:3px solid #000;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700">QR INDISPO</div>`}
+      <p>SCANNER → FICHE PALETTE</p>
+    </div>
+  </div>
+</div>
+</body></html>`;
+
+  w.document.open();
+  w.document.write(html);
+  w.document.close();
+}
 
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Palette #${lot}</title>
 <style>
@@ -450,8 +512,10 @@ body{font-family:Arial Black,Arial,sans-serif;background:#fff;display:flex;justi
   </div>
 </div>
 </body></html>`;
-  const w = window.open("", "_blank");
-  if (w) { w.document.write(html); w.document.close(); }
+
+  w.document.open();
+  w.document.write(html);
+  w.document.close();
 }
 
 // ─── FORMULAIRE PERTE DEPUIS SCAN ───
