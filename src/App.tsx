@@ -229,8 +229,8 @@ function ProduitRow({ arrivage, onValidate, onDelete, onOuvreRapport, selectMode
   const [poidsOk, setPoidsOk] = useState(true);
   const [litige, setLitige] = useState(false);
   const [colisRecus, setColisRecus] = useState<string>("");
-  const [poidsBrut, setPoidsBrut] = useState<string>("");
-  const [poidsNet, setPoidsNet] = useState<string>("");
+  const [poidsBrut, setPoidsBrut] = useState<string>(arrivage.poids_brut || "");
+  const [poidsNet, setPoidsNet] = useState<string>(arrivage.poids_net || arrivage.poids_colis || "");
   const [saving, setSaving] = useState(false);
 
   const colisAttendu = arrivage.quantite || 0;
@@ -2085,7 +2085,7 @@ export default function App() {
               curDate = parsedDate && !isNaN(parsedDate.getTime()) ? parsedDate.toLocaleDateString("fr-FR") : curDate;
             }catch{}}}
             const nb=parseInt(String(row[4]||"0"));
-            if(/^0[0-9]$/.test(c0)&&c1&&c2&&nb>0) arr.push({fournisseur:curFourn,produit:c2,lot_interne:curLot.length>=8?curLot.slice(4,8):curLot,lot_fournisseur:"",quantite:nb,unite:"colis",poids_net:String(row[10]||""),origine:"",variete:"",date:curDate,timestamp:Date.now()});
+            if(/^0[0-9]$/.test(c0)&&c1&&c2&&nb>0) arr.push({fournisseur:curFourn,produit:c2,lot_interne:curLot.length>=8?curLot.slice(4,8):curLot,lot_fournisseur:"",quantite:nb,unite:"colis",poids_brut:String(row[6]||"").replace(",","."),poids_net:String(row[8]||"").replace(",","."),origine:"",variete:"",date:curDate,timestamp:Date.now()});
           });
           if(!arr.length){showToast("Aucun arrivage détecté","error");setImportingArr(false);return;}
           setPreviewArr(arr); setImportingArr(false);
