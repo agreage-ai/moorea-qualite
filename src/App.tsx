@@ -270,6 +270,15 @@ function ProduitRow({ arrivage, onValidate, onDelete, onOuvreRapport, selectMode
           </div>
         </div>
         <div style={{ display: "flex", gap: 6 }}>
+          <button onClick={async () => {
+            const nouvelleDate = window.prompt("Nouvelle date de livraison (JJ/MM/AAAA) :", arrivage.date || "");
+            if (!nouvelleDate) return;
+            const [dd, mm, yyyy] = nouvelleDate.split("/");
+            if (!dd || !mm || !yyyy || isNaN(new Date(`${yyyy}-${mm}-${dd}`).getTime())) { alert("Format invalide — utilise JJ/MM/AAAA"); return; }
+            const { ref: fbRef, update: fbUpdate } = await import("firebase/database");
+            const { db: dbImport } = await import("./firebase");
+            await fbUpdate(fbRef(dbImport, `arrivages/${arrivage.id}`), { date: nouvelleDate });
+          }} style={{ background: "transparent", border: "1px solid #e8e0d0", color: "#6b7280", borderRadius: 8, padding: "3px 7px", cursor: "pointer", fontSize: 11 }}>📅</button>
           <button onClick={() => onDelete(arrivage.id)} style={{ background: "transparent", border: "1px solid #fca5a5", color: "#dc2626", borderRadius: 8, padding: "3px 7px", cursor: "pointer", fontSize: 11 }}>🗑</button>
         </div>
       </div>
@@ -370,6 +379,241 @@ function FournisseurBlock({ fournisseur, produits, onValidate, onDelete, onOuvre
         <span style={{ fontSize: 18, color: "#c8a84b", fontWeight: 700, transform: open ? "rotate(90deg)" : "none", transition: "transform 0.2s", display: "inline-block" }}>›</span>
       </div>
       {open && <div style={{ padding: "12px 14px" }}>{produits.map((a: any) => <ProduitRow key={a.id} arrivage={a} onValidate={onValidate} onDelete={onDelete} onOuvreRapport={onOuvreRapport} selectMode={selectMode} selected={selectedArrivages?.has(a.id)} onToggleSelect={onToggleSelect} />)}</div>}
+    </div>
+  );
+}
+
+// ─── QR CODE ÉTIQUETTE PALETTE ───
+async function imprimerEtiquettePalette(arrivage: any) {
+  const lot = arrivage.lot_interne || arrivage.id;
+  const url = `${window.location.origin}${window.location.pathname}?lot=${lot}`;
+  const qrUrl = `https://chart.googleapis.com/chart?chs=180x180&cht=qr&chl=${encodeURIComponent(url)}&choe=UTF-8`;
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Palette #${lot}</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:Arial,Helvetica,sans-serif;background:#fff;display:flex;justify-content:center;align-items:flex-start;padding:20px;min-height:100vh}
+.etiquette{width:148mm;min-height:105mm;background:#FFE600;border:3px solid #222;padding:6mm;position:relative;page-break-inside:avoid}
+.lot{font-size:36px;font-weight:900;color:#000;letter-spacing:1px;line-height:1;margin-bottom:4mm;border-bottom:2px solid #000;padding-bottom:3mm}
+.produit{font-size:20px;font-weight:700;color:#000;margin-bottom:2mm}
+.fourn{font-size:16px;font-weight:400;color:#111;margin-bottom:4mm}
+.bottom{display:flex;justify-content:space-between;align-items:flex-end;margin-top:auto}
+.qty-block .qty{font-size:48px;font-weight:900;color:#000;line-height:1}
+.qty-block .unite{font-size:16px;font-weight:600;color:#333;margin-top:1mm}
+.infos{font-size:11px;color:#333;margin-bottom:3mm;line-height:1.6}
+.infos span{font-weight:700;color:#000}
+.qr-block{text-align:right}
+.qr-block img{width:100px;height:100px;border:2px solid #000}
+.qr-block p{font-size:8px;color:#555;margin-top:1mm}
+.btn-print{position:fixed;top:14px;right:14px;padding:9px 18px;background:#222;color:#FFE600;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:14px}
+@media print{.btn-print{display:none}body{padding:0}}</style>
+</head><body>
+<button class="btn-print" onclick="window.print()">🖨 Imprimer</button>
+<div class="etiquette">
+  <div class="lot">MRA.${String(lot).padStart(4,"0")}</div>
+  <div class="produit">${arrivage.produit || "—"}</div>
+  <div class="fourn">${arrivage.fournisseur || "—"}</div>
+  <div class="infos">
+    📅 <span>${arrivage.date || "—"}</span> &nbsp;|&nbsp;
+    🌍 <span>${arrivage.origine || "—"}</span> &nbsp;|&nbsp;
+    🏷 Lot fourn. <span>${arrivage.lot_fournisseur || "—"}</span><br>
+    ⚖️ Brut <span>${arrivage.poids_brut || "—"} kg</span> &nbsp;|&nbsp;
+    🥬 Net <span>${arrivage.poids_net || "—"} kg</span>
+  </div>
+  <div class="bottom">
+    <div class="qty-block">
+      <div class="qty">${arrivage.quantite || "—"}</div>
+      <div class="unite">${arrivage.unite || "colis"}</div>
+    </div>
+    <div class="qr-block">
+      <img src="${qrUrl}" alt="QR"/>
+      <p>Scan → fiche palette</p>
+    </div>
+  </div>
+</div>
+</body></html>`;
+  const w = window.open("", "_blank");
+  if (w) { w.document.write(html); w.document.close(); }
+}
+
+// ─── FORMULAIRE PERTE DEPUIS SCAN ───
+function PalettePerteForm({ arrivage }: { arrivage: any }) {
+  const [perteQty, setPerteQty] = useState("");
+  const [perteRaison, setPerteRaison] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [done, setDone] = useState(false);
+
+  const handlePerte = async () => {
+    if (!perteQty || !perteRaison) return;
+    setSaving(true);
+    try {
+      const { ref: fbRef, update } = await import("firebase/database");
+      const { db: dbImport } = await import("./firebase");
+      await update(fbRef(dbImport, `arrivages/${arrivage.id}`), {
+        destruction: { quantite: parseInt(perteQty), raison: perteRaison, date: new Date().toLocaleDateString("fr-FR"), effectuee: true }
+      });
+      setDone(true);
+    } catch { alert("Erreur enregistrement"); }
+    setSaving(false);
+  };
+
+  if (done) return (
+    <div style={{ background: "#f0fdf4", borderRadius: 16, padding: 20, border: "1.5px solid #bbf7d0", textAlign: "center" }}>
+      <div style={{ fontSize: 32, marginBottom: 8 }}>✅</div>
+      <p style={{ margin: 0, fontWeight: 700, color: "#15803d" }}>Perte enregistrée sur le lot #{arrivage.lot_interne}</p>
+    </div>
+  );
+
+  return (
+    <div style={{ background: "#fff", borderRadius: 16, padding: 16, boxShadow: "0 2px 10px rgba(0,0,0,0.05)", border: "1.5px solid #fca5a5" }}>
+      <p style={{ margin: "0 0 12px", fontWeight: 700, fontSize: 14, color: "#dc2626" }}>🗑 Déclarer une perte / destruction</p>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <div>
+          <p style={{ margin: "0 0 4px", fontSize: 12, color: "#6b7280" }}>Nombre de colis à détruire (sur {arrivage.quantite})</p>
+          <input type="number" min="1" max={arrivage.quantite} value={perteQty} onChange={e => setPerteQty(e.target.value)}
+            style={{ width: "100%", padding: "10px 12px", border: "1.5px solid #fca5a5", borderRadius: 10, fontSize: 16, fontWeight: 700, outline: "none", boxSizing: "border-box" as const }} />
+        </div>
+        <div>
+          <p style={{ margin: "0 0 4px", fontSize: 12, color: "#6b7280" }}>Raison</p>
+          <input type="text" value={perteRaison} onChange={e => setPerteRaison(e.target.value)}
+            placeholder="Ex: marchandise avariée, DLC dépassée..."
+            style={{ width: "100%", padding: "10px 12px", border: "1.5px solid #fca5a5", borderRadius: 10, fontSize: 14, outline: "none", boxSizing: "border-box" as const }} />
+        </div>
+        <button onClick={handlePerte} disabled={saving || !perteQty || !perteRaison}
+          style={{ width: "100%", padding: "12px", borderRadius: 10, border: "none", background: (!perteQty || !perteRaison) ? "#fca5a5" : "#dc2626", color: "#fff", cursor: (!perteQty || !perteRaison) ? "not-allowed" : "pointer", fontSize: 14, fontWeight: 700, fontFamily: "'Syne', sans-serif" }}>
+          {saving ? "Enregistrement..." : "✓ Confirmer la perte"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── COMPOSANT SCANNER QR ───
+function ScannerQR({ onScan, onClose }: { onScan: (lot: string) => void; onClose: () => void }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [error, setError] = useState("");
+  const [scanning, setScanning] = useState(false);
+  const streamRef = useRef<MediaStream | null>(null);
+  const rafRef = useRef<number>(0);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadJsQR = (): Promise<any> => new Promise((res, rej) => {
+      if ((window as any).jsQR) { res((window as any).jsQR); return; }
+      const s = document.createElement("script");
+      s.src = "https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js";
+      s.onload = () => res((window as any).jsQR);
+      s.onerror = rej;
+      document.head.appendChild(s);
+    });
+
+    const start = async () => {
+      try {
+        const jsQR = await loadJsQR();
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } }
+        });
+        if (!active) { stream.getTracks().forEach(t => t.stop()); return; }
+        streamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          await videoRef.current.play();
+        }
+        setScanning(true);
+
+        const tick = () => {
+          if (!active || !videoRef.current || !canvasRef.current) return;
+          const video = videoRef.current;
+          const canvas = canvasRef.current;
+          if (video.readyState !== video.HAVE_ENOUGH_DATA) { rafRef.current = requestAnimationFrame(tick); return; }
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          const ctx = canvas.getContext("2d")!;
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "dontInvert" });
+          if (code) {
+            // Extraire le lot de l'URL
+            try {
+              const url = new URL(code.data);
+              const lot = url.searchParams.get("lot");
+              if (lot) { active = false; onScan(lot); return; }
+            } catch {
+              // Si c'est juste un numéro de lot direct
+              if (/^\d{3,6}$/.test(code.data.trim())) { active = false; onScan(code.data.trim()); return; }
+            }
+          }
+          rafRef.current = requestAnimationFrame(tick);
+        };
+        rafRef.current = requestAnimationFrame(tick);
+      } catch (e: any) {
+        setError(e.name === "NotAllowedError" ? "Accès à la caméra refusé. Autorise l'accès dans les réglages." : "Caméra indisponible : " + e.message);
+      }
+    };
+
+    start();
+    return () => {
+      active = false;
+      cancelAnimationFrame(rafRef.current);
+      streamRef.current?.getTracks().forEach(t => t.stop());
+    };
+  }, []);
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "#000", zIndex: 999, display: "flex", flexDirection: "column" }}>
+      {/* Header */}
+      <div style={{ background: "#0a0a0a", padding: "14px 20px", display: "flex", alignItems: "center", gap: 12, borderBottom: "2px solid #c8a84b", flexShrink: 0 }}>
+        <button onClick={onClose} style={{ padding: "7px 14px", borderRadius: 9, border: "none", background: "#c8a84b", cursor: "pointer", fontSize: 12, fontWeight: 700, color: "#0a0a0a" }}>✕ Fermer</button>
+        <p style={{ margin: 0, fontWeight: 800, fontSize: 15, color: "#c8a84b", textTransform: "uppercase", letterSpacing: 1 }}>📷 Scanner QR palette</p>
+      </div>
+
+      {/* Caméra */}
+      <div style={{ flex: 1, position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <video ref={videoRef} style={{ width: "100%", height: "100%", objectFit: "cover" }} playsInline muted />
+        <canvas ref={canvasRef} style={{ display: "none" }} />
+
+        {/* Viseur */}
+        {scanning && !error && (
+          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
+            <div style={{ width: 240, height: 240, position: "relative" }}>
+              {/* Coins du viseur */}
+              {[{ top: 0, left: 0 }, { top: 0, right: 0 }, { bottom: 0, left: 0 }, { bottom: 0, right: 0 }].map((pos, i) => (
+                <div key={i} style={{ position: "absolute", width: 40, height: 40, ...pos, border: "4px solid #c8a84b", borderRadius: 4,
+                  borderRight: "right" in pos ? "4px solid #c8a84b" : "none",
+                  borderLeft: "left" in pos ? "4px solid #c8a84b" : "none",
+                  borderBottom: "bottom" in pos ? "4px solid #c8a84b" : "none",
+                  borderTop: "top" in pos ? "4px solid #c8a84b" : "none",
+                }} />
+              ))}
+              {/* Ligne de scan animée */}
+              <div style={{ position: "absolute", left: 0, right: 0, height: 2, background: "#c8a84b", animation: "scan-line 2s linear infinite", top: "50%" }} />
+            </div>
+          </div>
+        )}
+
+        <style>{`
+          @keyframes scan-line {
+            0% { transform: translateY(-120px); opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { transform: translateY(120px); opacity: 1; }
+          }
+        `}</style>
+
+        {error && (
+          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+            <div style={{ background: "#fff", borderRadius: 16, padding: 24, textAlign: "center", maxWidth: 320 }}>
+              <div style={{ fontSize: 40, marginBottom: 12 }}>📷</div>
+              <p style={{ fontWeight: 700, color: "#dc2626", marginBottom: 8 }}>Caméra indisponible</p>
+              <p style={{ fontSize: 13, color: "#6b7280" }}>{error}</p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div style={{ background: "#0a0a0a", padding: "14px 20px", textAlign: "center", flexShrink: 0 }}>
+        <p style={{ margin: 0, fontSize: 13, color: "rgba(255,255,255,0.6)" }}>Pointez la caméra vers le QR code de la palette</p>
+      </div>
     </div>
   );
 }
@@ -595,6 +839,13 @@ function ArrivageTraiteRow({ arrivage: a, onDelete, onOuvreRapport }: { arrivage
 
           {/* Actions */}
           <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+            <button onClick={() => imprimerEtiquettePalette(a)}
+              style={{ padding: "5px 10px", background: "#fffbf0", border: "1px solid #c8a84b", color: "#8a6f2e", borderRadius: 8, cursor: "pointer", fontSize: 11, fontWeight: 700 }}>🏷 QR Étiquette</button>
+            <button onClick={async () => {
+              const { ref: fbRef, update: fbUpdate } = await import("firebase/database");
+              const { db: dbImport } = await import("./firebase");
+              await fbUpdate(fbRef(dbImport, `arrivages/${a.id}`), { statut: "en attente", rapport: null, litige: null, validatedAt: null });
+            }} style={{ padding: "5px 10px", background: "#fffbeb", border: "1px solid #fcd34d", color: "#d97706", borderRadius: 8, cursor: "pointer", fontSize: 11, fontWeight: 700 }}>↺ Re-pointer</button>
             <button onClick={() => onDelete(a.id)} style={{ padding: "5px 10px", background: "transparent", border: "1px solid rgba(252,165,165,0.4)", color: "#fca5a5", borderRadius: 8, cursor: "pointer", fontSize: 11 }}>🗑 Supprimer</button>
           </div>
         </div>
@@ -2026,6 +2277,8 @@ export default function App() {
   const [showLitiges, setShowLitiges] = useState(false);
   const [showRecherche, setShowRecherche] = useState(false);
   const [showStock, setShowStock] = useState(false);
+  const [showPalette, setShowPalette] = useState<string | null>(null);
+  const [showScanner, setShowScanner] = useState(false);
   const [stockPage, setStockPage] = useState<"home"|"comptage"|"ecarts"|"config">("home");
   const [stockAllArticles, setStockAllArticles] = useState<any[]>([]);
   const [stockArticles, setStockArticles] = useState<any[]>([]);
@@ -2105,6 +2358,11 @@ export default function App() {
 
   // ─── LOAD STOCK OVERRIDES ───
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const lot = params.get("lot");
+    if (lot) { setShowPalette(lot); setShowAccueil(false); }
+  }, []);
+  useEffect(() => {
     if (!showStock) return;
     const loadOv = async () => {
       try {
@@ -2127,7 +2385,7 @@ export default function App() {
     const statut = decision === "conforme" ? "validé" : ncType;
     const rapport = { qualite: ctrl.qualite, temperature: ctrl.temperature, poids_mesure: ctrl.poids_mesure, observations: ctrl.observations, heure_agreage: now2.toTimeString().slice(0, 5), date_rapport: now2.toLocaleDateString("fr-FR"), agreeur: user?.displayName || "" };
     const litige = decision === "non_conforme" ? { type: ncType, raison, pct: pct || "", lot_fournisseur: arrivage.lot_fournisseur || "", date: now2.toLocaleDateString("fr-FR"), statut: "ouvert", createdAt: Date.now() } : null;
-    await update(ref(db, `arrivages/${arrivage.id}`), { statut, archived: true, rapport, ...(litige ? { litige } : {}), validatedAt: Date.now() });
+    await update(ref(db, `arrivages/${arrivage.id}`), { statut, rapport, ...(litige ? { litige } : {}), validatedAt: Date.now() });
     showToast(decision === "conforme" ? "✅ Validé et archivé" : "📋 Rapport + litige créés");
   };
 
@@ -3557,6 +3815,113 @@ _PDF joint_`;
     </div>
   );
 
+  // ─── PAGE FICHE PALETTE (scan QR) ───
+  if (showPalette) {
+    const arrivage = arrivages.find(a => a.lot_interne === showPalette);
+    const rapport = arrivage ? rapports.find(r => r.arrivage_id === arrivage.id) : null;
+    return (
+      <div style={{ minHeight: "100vh", background: "#f5f3ee", fontFamily: "'Syne', sans-serif" }}>
+        <style>{styles}</style>
+        <div style={{ background: "#0a0a0a", padding: "14px 20px", display: "flex", alignItems: "center", gap: 12, borderBottom: "3px solid #c8a84b", position: "sticky", top: 0, zIndex: 100 }}>
+          <button onClick={() => { setShowPalette(null); setShowAccueil(true); window.history.replaceState({}, "", window.location.pathname); }}
+            style={{ padding: "7px 14px", borderRadius: 9, border: "none", background: "#c8a84b", cursor: "pointer", fontSize: 12, fontWeight: 700, color: "#0a0a0a" }}>🏠</button>
+          <p style={{ margin: 0, fontWeight: 800, fontSize: 15, color: "#c8a84b", textTransform: "uppercase", letterSpacing: 1 }}>📦 Palette #{showPalette}</p>
+        </div>
+
+        <div style={{ maxWidth: 600, margin: "0 auto", padding: "20px 16px 60px" }}>
+          {!arrivage ? (
+            <div style={{ textAlign: "center", padding: "3rem", background: "#fff", borderRadius: 20, border: "1.5px solid #e8e0d0" }}>
+              <div style={{ fontSize: 40, marginBottom: 12 }}>🔎</div>
+              <p style={{ fontWeight: 700, color: "#374151" }}>Lot #{showPalette} introuvable</p>
+              <p style={{ fontSize: 13, color: "#9ca3af" }}>Ce lot n'existe pas ou n'a pas encore été importé</p>
+            </div>
+          ) : (
+            <>
+              {/* Fiche principale */}
+              <div style={{ background: "#fff", borderRadius: 20, padding: 20, marginBottom: 14, boxShadow: "0 4px 20px rgba(0,0,0,0.07)", borderLeft: `5px solid ${arrivage.statut === "validé" ? "#27ae60" : arrivage.statut === "refusé" ? "#dc2626" : "#d97706"}` }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
+                  <div>
+                    <p style={{ margin: "0 0 4px", fontSize: 20, fontWeight: 800, color: "#1a2e1a", fontFamily: "'Syne', sans-serif" }}>{arrivage.produit}</p>
+                    <p style={{ margin: 0, fontSize: 14, color: "#6b7280" }}>{arrivage.fournisseur}</p>
+                  </div>
+                  <BadgeArrivage status={arrivage.statut} />
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                  {[
+                    { icon: "🔖", label: "Lot interne", value: arrivage.lot_interne },
+                    { icon: "📅", label: "Date arrivée", value: arrivage.date },
+                    { icon: "📦", label: "Quantité", value: `${arrivage.quantite} ${arrivage.unite}` },
+                    { icon: "⚖️", label: "Poids brut", value: arrivage.poids_brut ? `${arrivage.poids_brut} kg` : "—" },
+                    { icon: "🥬", label: "Poids net", value: arrivage.poids_net ? `${arrivage.poids_net} kg` : "—" },
+                    { icon: "🌍", label: "Origine", value: arrivage.origine || "—" },
+                    { icon: "🏷", label: "Lot fournisseur", value: arrivage.lot_fournisseur || "—" },
+                    { icon: "🌡", label: "Température", value: arrivage.rapport?.temperature || "—" },
+                  ].map(f => (
+                    <div key={f.label} style={{ background: "#f9fafb", borderRadius: 10, padding: "10px 12px" }}>
+                      <p style={{ margin: "0 0 2px", fontSize: 10, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.5px" }}>{f.icon} {f.label}</p>
+                      <p style={{ margin: 0, fontWeight: 700, fontSize: 14, color: "#1a2e1a" }}>{f.value}</p>
+                    </div>
+                  ))}
+                </div>
+                {arrivage.rapport?.observations && (
+                  <div style={{ marginTop: 10, background: "#fffbeb", borderRadius: 10, padding: "10px 12px", border: "1px solid #fde68a" }}>
+                    <p style={{ margin: "0 0 2px", fontSize: 10, color: "#d97706", textTransform: "uppercase" }}>📝 Observations</p>
+                    <p style={{ margin: 0, fontSize: 13, color: "#374151" }}>{arrivage.rapport.observations}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Rapport qualité */}
+              {rapport && (
+                <div style={{ background: "#fff", borderRadius: 16, padding: 16, marginBottom: 14, boxShadow: "0 2px 10px rgba(0,0,0,0.05)" }}>
+                  <p style={{ margin: "0 0 10px", fontWeight: 700, fontSize: 13, color: "#1a2e1a" }}>📋 Rapport qualité · {rapport.numeroRapport}</p>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    {rapport.notes?.qualite > 0 && <span style={{ fontSize: 12, background: "#f0fdf4", color: "#15803d", padding: "4px 10px", borderRadius: 20, fontWeight: 700 }}>⭐ {rapport.notes.qualite}/5</span>}
+                    {rapport.score && <ScoreCircle score={rapport.score} />}
+                    {rapport.temperature && <span style={{ fontSize: 12, background: "#eff6ff", color: "#1d4ed8", padding: "4px 10px", borderRadius: 20 }}>🌡 {rapport.temperature}°C</span>}
+                  </div>
+                </div>
+              )}
+
+              {/* Litige */}
+              {arrivage.litige && (
+                <div style={{ background: arrivage.litige.type === "refusé" ? "#fef2f2" : "#fffbeb", borderRadius: 16, padding: 16, marginBottom: 14, border: `1.5px solid ${arrivage.litige.type === "refusé" ? "#fca5a5" : "#fde68a"}` }}>
+                  <p style={{ margin: "0 0 6px", fontWeight: 700, fontSize: 13, color: arrivage.litige.type === "refusé" ? "#dc2626" : "#d97706" }}>
+                    {arrivage.litige.type === "refusé" ? "❌ Litige refus" : "⚠️ Litige réserve"}
+                  </p>
+                  {arrivage.litige.raison && <p style={{ margin: 0, fontSize: 13, color: "#374151" }}>{arrivage.litige.raison}</p>}
+                </div>
+              )}
+
+              {/* Destruction existante */}
+              {arrivage.destruction && (
+                <div style={{ background: "#fef2f2", borderRadius: 16, padding: 16, marginBottom: 14, border: "1.5px solid #fca5a5" }}>
+                  <p style={{ margin: "0 0 4px", fontWeight: 700, fontSize: 13, color: "#dc2626" }}>🗑 Destruction enregistrée</p>
+                  <p style={{ margin: 0, fontSize: 13, color: "#374151" }}>{arrivage.destruction.quantite} {arrivage.unite} — {arrivage.destruction.raison}</p>
+                  <p style={{ margin: "4px 0 0", fontSize: 11, color: "#9ca3af" }}>Le {arrivage.destruction.date}</p>
+                </div>
+              )}
+
+              {/* Action : Déclarer une perte */}
+              {!arrivage.destruction && (
+                <PalettePerteForm arrivage={arrivage} />
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  if (showScanner) {
+    return (
+      <ScannerQR
+        onScan={(lot) => { setShowScanner(false); setShowPalette(lot); setShowAccueil(false); }}
+        onClose={() => setShowScanner(false)}
+      />
+    );
+  }
+
   if (showAccueil) {
     const getHello = () => {
       const h = new Date().getHours();
@@ -3565,37 +3930,28 @@ _PDF joint_`;
       return "Bonsoir";
     };
     const nbAttente = arrivages.filter(a => a.statut === "en attente").length;
-    const nbLitiges = arrivages.filter(a => (a.statut === "refusé" || a.litige?.type === "refusé") && !a.recupere && !a.destruction?.effectuee).length;
+    const nbRefus = arrivages.filter(a => (a.statut === "refusé" || a.litige?.type === "refusé") && !a.recupere && !a.destruction?.effectuee).length;
     const buttons = [
       { icon: "📋", label: "Pointer arrivage", sub: "Contrôler et valider les arrivages du jour", color: "#c8a84b", badge: nbAttente || null, action: () => { setShowAccueil(false); setPageMode("arrivages"); setVue("__none__" as any); } },
-      { icon: "⚠️", label: "Litiges Moorea", sub: "Refus et réserves en attente de traitement", color: "#dc2626", badge: nbLitiges || null, action: () => { setShowAccueil(false); setShowLitiges(true); } },
       { icon: "📊", label: "Rapports qualité", sub: "Historique et envoi des rapports d'agrément", color: "#16a34a", badge: null, action: () => { setShowAccueil(false); setVue("historique"); setPageMode("arrivages"); } },
       { icon: "🔍", label: "Chercher un lot", sub: "Retrouver un arrivage par produit ou numéro de lot", color: "#3b82f6", badge: null, action: () => { setShowAccueil(false); setShowRecherche(true); setSearchLotQuery(""); } },
       { icon: "📦", label: "Compter le stock", sub: "Inventaire GMS & Prestige avec écarts", color: "#0891b2", badge: null, action: () => { setShowAccueil(false); setShowStock(true); setStockTeam(null); setStockFilter(""); setStockEcartFilter("tous"); } },
+      { icon: "📷", label: "Scanner une palette", sub: "Scanne le QR code pour accéder à la fiche", color: "#6b7280", badge: null, action: () => { setShowAccueil(false); setShowScanner(true); } },
       { icon: "✦", label: "Nouveau rapport manuel", sub: "Saisir un rapport sans arrivage lié", color: "#8b5cf6", badge: null, action: () => { reset(); setRapportArrivage(null); setShowAccueil(false); setVue("form"); window.scrollTo(0, 0); } },
     ];
     return (
       <div style={{ minHeight: "100vh", background: "#f5f3ee", fontFamily: "'Syne', sans-serif" }}>
         <style>{styles}</style>
 
-        {/* BANDEAU GRADIENT VERT → DORÉ */}
+        {/* BANDEAU */}
         <div style={{ background: "linear-gradient(135deg, #1a3a1a 0%, #2d5a1e 40%, #8a6f2e 100%)", padding: "40px 24px 56px", textAlign: "center", position: "relative", overflow: "hidden" }}>
-          {/* Cercles décoratifs */}
           <div style={{ position: "absolute", top: -40, right: -40, width: 180, height: 180, borderRadius: "50%", background: "rgba(200,168,75,0.12)", pointerEvents: "none" }} />
           <div style={{ position: "absolute", bottom: -30, left: -30, width: 130, height: 130, borderRadius: "50%", background: "rgba(200,168,75,0.08)", pointerEvents: "none" }} />
-
           <div style={{ fontSize: 46, marginBottom: 10 }}>🌿</div>
           <h1 style={{ margin: 0, fontSize: 27, fontWeight: 800, color: "#fff", letterSpacing: "-0.5px" }}>
             {getHello()}, {user?.displayName?.split(" ")[0] || "!"} 👋
           </h1>
-          <p style={{ margin: "8px 0 0", fontSize: 14, color: "rgba(255,255,255,0.65)" }}>
-            Que voulez-vous faire aujourd'hui ?
-          </p>
-          {nbAttente > 0 && (
-            <div style={{ display: "none" }} />
-          )}
-
-          {/* Déconnexion discrète en haut à droite */}
+          <p style={{ margin: "8px 0 0", fontSize: 14, color: "rgba(255,255,255,0.65)" }}>Que voulez-vous faire aujourd'hui ?</p>
           <button onClick={() => signOut(auth)} style={{ position: "absolute", top: 16, right: 16, padding: "6px 12px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.2)", background: "rgba(255,255,255,0.08)", cursor: "pointer", fontSize: 11, color: "rgba(255,255,255,0.5)", fontFamily: "'Syne', sans-serif" }}>
             {user?.displayName?.split(" ")[0]} · Déco
           </button>
@@ -3619,20 +3975,26 @@ _PDF joint_`;
                 <span style={{ color: "#d1d5db", fontSize: 18, flexShrink: 0 }}>›</span>
               </button>
             ))}
-          </div>
 
-          {/* STATS */}
-          <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
-            {[
-              { label: "Arrivages", value: arrivages.length, color: "#c8a84b" },
-              { label: "En attente", value: nbAttente, color: "#d97706" },
-              { label: "Litiges", value: nbLitiges, color: "#dc2626" },
-            ].map(s => (
-              <div key={s.label} style={{ flex: 1, background: "#fff", border: "1.5px solid #e8e0d0", borderRadius: 14, padding: "14px 10px", textAlign: "center", borderTop: `3px solid ${s.color}`, boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
-                <p style={{ margin: 0, fontSize: 24, fontWeight: 800, color: s.color, letterSpacing: "-1px" }}>{s.value}</p>
-                <p style={{ margin: "2px 0 0", fontSize: 11, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.5px" }}>{s.label}</p>
-              </div>
-            ))}
+            {/* Sous-boutons litiges sous Rapports qualité */}
+            <div style={{ display: "flex", gap: 8, marginTop: -4 }}>
+              <button onClick={() => { setShowAccueil(false); setVue("historique"); setPageMode("arrivages"); setFilterDecision(""); setSortBy("decision"); }}
+                style={{ flex: 1, display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", borderRadius: 12, cursor: "pointer", border: "1.5px solid #fca5a5", background: "#fff5f5", textAlign: "left", fontFamily: "'Syne', sans-serif" }}>
+                <span style={{ fontSize: 18 }}>📋</span>
+                <div style={{ flex: 1 }}>
+                  <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: "#dc2626" }}>Historique des rapports</p>
+                  <p style={{ margin: 0, fontSize: 10, color: "#9ca3af" }}>Tous les refus et réserves</p>
+                </div>
+              </button>
+              <button onClick={() => { setShowAccueil(false); setVue("historique"); setPageMode("arrivages"); setFilterDecision("refus"); setSortBy("date_desc"); }}
+                style={{ flex: 1, display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", borderRadius: 12, cursor: "pointer", border: "1.5px solid #fcd34d", background: "#fffbeb", textAlign: "left", fontFamily: "'Syne', sans-serif" }}>
+                <span style={{ fontSize: 18 }}>🔄</span>
+                <div style={{ flex: 1 }}>
+                  <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: "#d97706" }}>Refus à faire signer</p>
+                  {nbRefus > 0 && <p style={{ margin: 0, fontSize: 10, color: "#d97706", fontWeight: 700 }}>{nbRefus} en attente</p>}
+                </div>
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -4740,10 +5102,6 @@ _PDF joint_`;
         {/* HISTORIQUE */}
         {vue === "historique" && (
           <div className="fade-up">
-            {/* BOUTON RAPPORT MANUEL */}
-            <button onClick={() => { reset(); setRapportArrivage(null); setVue("form"); window.scrollTo(0,0); }} style={{ width: "100%", marginBottom: 14, padding: "13px", borderRadius: 14, border: "2px solid #c8a84b", background: "#0a0a0a", cursor: "pointer", fontSize: 14, fontWeight: 700, color: "#c8a84b", fontFamily: "'Syne', sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-              ✦ Nouveau rapport manuel
-            </button>
             <div style={{ marginBottom: 10, display: "flex", gap: 8 }}>
               <input
                 type="text"
