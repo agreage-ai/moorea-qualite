@@ -387,8 +387,24 @@ function FournisseurBlock({ fournisseur, produits, onValidate, onDelete, onOuvre
 async function imprimerEtiquettePalette(arrivage: any) {
   const lot = arrivage.lot_interne || arrivage.id;
   const url = `${window.location.origin}${window.location.pathname}?id=${arrivage.id}`;
+
+  // Génération QR code en base64 directement dans React
+  const qrDataUrl: string = await new Promise((resolve, reject) => {
+    const loadQR = () => new Promise<any>((res, rej) => {
+      if ((window as any).QRCode) { res((window as any).QRCode); return; }
+      const s = document.createElement("script");
+      s.src = "https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js";
+      s.onload = () => res((window as any).QRCode);
+      s.onerror = rej;
+      document.head.appendChild(s);
+    });
+    loadQR().then((QRCode: any) => {
+      QRCode.toDataURL(url, { width: 200, margin: 1, color: { dark: "#000000", light: "#FFE600" } })
+        .then(resolve).catch(reject);
+    }).catch(reject);
+  });
+
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Palette #${lot}</title>
-<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"><\/script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:Arial Black,Arial,sans-serif;background:#fff;display:flex;justify-content:center;padding:20px}
@@ -404,7 +420,7 @@ body{font-family:Arial Black,Arial,sans-serif;background:#fff;display:flex;justi
 .qty{font-size:80px;font-weight:900;color:#000;line-height:1}
 .unite{font-size:24px;font-weight:700;color:#000;margin-top:2mm}
 .qr-block{text-align:right}
-.qr-block canvas{border:3px solid #000}
+.qr-block img{width:130px;height:130px;border:3px solid #000}
 .qr-block p{font-size:11px;font-weight:700;color:#000;margin-top:2mm;text-align:center}
 .btn-print{position:fixed;top:10px;right:10px;padding:9px 18px;background:#000;color:#FFE600;border:none;border-radius:8px;font-weight:900;cursor:pointer;font-size:14px}
 @media print{.btn-print{display:none}body{padding:0}}
@@ -428,18 +444,11 @@ body{font-family:Arial Black,Arial,sans-serif;background:#fff;display:flex;justi
       <div class="unite">${(arrivage.unite || "COLIS").toUpperCase()}</div>
     </div>
     <div class="qr-block">
-      <canvas id="qr"></canvas>
+      <img src="${qrDataUrl}" alt="QR Code" />
       <p>SCANNER → FICHE PALETTE</p>
     </div>
   </div>
 </div>
-<script>
-window.onload = function() {
-  QRCode.toCanvas(document.getElementById('qr'), '${url}', {
-    width: 130, margin: 1, color: { dark: '#000000', light: '#FFE600' }
-  });
-};
-<\/script>
 </body></html>`;
   const w = window.open("", "_blank");
   if (w) { w.document.write(html); w.document.close(); }
