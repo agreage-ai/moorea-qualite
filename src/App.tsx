@@ -3802,24 +3802,13 @@ _PDF joint_`;
                 <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
                   {dates.map(([date, s]) => {
                     const isToday = date === today;
-                    const pct = s.total > 0 ? Math.round(s.traites / s.total * 100) : 0;
                     return (
                       <div key={date} style={{ background: "#fff", borderRadius: 14, padding: "12px 16px", border: `1.5px solid ${isToday ? "#c8a84b" : "#e8e0d0"}`, display: "flex", alignItems: "center", gap: 14 }}>
-                        <div style={{ minWidth: 90 }}>
+                        <div style={{ flex: 1 }}>
                           <p style={{ margin: 0, fontWeight: 700, fontSize: 13, color: isToday ? "#c8a84b" : "#374151", fontFamily: "'Syne', sans-serif" }}>{isToday ? "Aujourd'hui" : date}</p>
                           <p style={{ margin: 0, fontSize: 11, color: "#9ca3af" }}>{s.total} article{s.total > 1 ? "s" : ""}</p>
                         </div>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                            <span style={{ fontSize: 11, color: "#6b7280" }}>{s.traites}/{s.total} traités</span>
-                            <span style={{ fontSize: 11, fontWeight: 700, color: pct === 100 ? "#16a34a" : "#d97706" }}>{pct}%</span>
-                          </div>
-                          <div style={{ height: 6, background: "#f3f4f6", borderRadius: 4 }}>
-                            <div style={{ height: 6, background: pct === 100 ? "#16a34a" : "#c8a84b", borderRadius: 4, width: `${pct}%`, transition: "width 0.4s" }} />
-                          </div>
-                        </div>
                         {s.litiges > 0 && <span style={{ fontSize: 11, fontWeight: 700, background: "#fef2f2", color: "#dc2626", border: "1px solid #fca5a5", padding: "3px 10px", borderRadius: 20, flexShrink: 0 }}>⚠️ {s.litiges} litige{s.litiges > 1 ? "s" : ""}</span>}
-                        {pct === 100 && <span style={{ fontSize: 16, flexShrink: 0 }}>✅</span>}
                       </div>
                     );
                   })}
