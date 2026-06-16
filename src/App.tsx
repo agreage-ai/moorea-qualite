@@ -3039,6 +3039,7 @@ export default function App() {
   const [showAccueil, setShowAccueil] = useState(true);
   const [showLitiges, setShowLitiges] = useState(false);
   const [showRecherche, setShowRecherche] = useState(false);
+  const [showYukon, setShowYukon] = useState(false);
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem("moorea-dark") === "1");
   const [popupEtiquette, setPopupEtiquette] = useState<any>(null);
   const [showStock, setShowStock] = useState(false);
@@ -4680,10 +4681,10 @@ _PDF joint_`;
     );
   }
 
-  const [showYukon, setShowYukon] = useState(false);
-
   if (showYukon) {
     return <>{fabScanner}<YukonApp onClose={() => { setShowYukon(false); setShowAccueil(true); }} /></>;
+  }
+  }
   }
 
   if (showAccueil) {
