@@ -2867,6 +2867,14 @@ function YukonApp({ onClose }: { onClose: () => void }) {
         {/* PAGE ARTICLES */}
         {page === "articles" && (
           <div>
+            {/* Bouton réinitialiser */}
+            <button onClick={async () => {
+              if (!window.confirm("Réinitialiser avec les noms moorea-stock ? Les articles actuels seront remplacés.")) return;
+              setArticles(YUKON_ARTICLES_DEFAULT);
+              await update(ref(db, "yukon/articles"), Object.fromEntries(YUKON_ARTICLES_DEFAULT.map(a => [a.id, a])));
+            }} style={{ width: "100%", marginBottom: 12, padding: "10px", borderRadius: 10, border: "1.5px solid #c8a84b", background: "#faf8f0", cursor: "pointer", fontSize: 13, fontWeight: 700, color: "#8a6f2e", fontFamily: "'Syne', sans-serif" }}>
+              🔄 Réinitialiser avec les noms moorea-stock
+            </button>
             <div style={{ background: "#fff", borderRadius: 16, overflow: "hidden", border: "1.5px solid #e8e0d0", marginBottom: 16 }}>
               {articles.map((art, idx) => (
                 <div key={art.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", borderBottom: "1px solid #f0f0f0", background: idx % 2 === 0 ? "#fff" : "#fafaf9" }}>
