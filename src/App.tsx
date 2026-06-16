@@ -4684,8 +4684,6 @@ _PDF joint_`;
   if (showYukon) {
     return <>{fabScanner}<YukonApp onClose={() => { setShowYukon(false); setShowAccueil(true); }} /></>;
   }
-  }
-  }
 
   if (showAccueil) {
     const getHello = () => {
