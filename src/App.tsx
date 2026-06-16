@@ -4280,7 +4280,6 @@ _PDF joint_`;
       { icon: "📊", label: "Rapports qualité", sub: "Historique et envoi des rapports d'agrément", color: "#16a34a", badge: null, action: () => { setShowAccueil(false); setVue("historique"); setPageMode("arrivages"); } },
       { icon: "🔍", label: "Chercher un lot", sub: "Retrouver un arrivage par produit ou numéro de lot", color: "#3b82f6", badge: null, action: () => { setShowAccueil(false); setShowRecherche(true); setSearchLotQuery(""); } },
       { icon: "📦", label: "Compter le stock", sub: "Inventaire GMS & Prestige avec écarts", color: "#0891b2", badge: null, action: () => { setShowAccueil(false); setShowStock(true); setStockTeam(null); setStockFilter(""); setStockEcartFilter("tous"); } },
-      { icon: "📷", label: "Scanner une palette", sub: "Scanne le QR code pour accéder à la fiche", color: "#6b7280", badge: null, action: () => { setShowAccueil(false); setShowScanner(true); } },
       { icon: "✦", label: "Nouveau rapport manuel", sub: "Saisir un rapport sans arrivage lié", color: "#8b5cf6", badge: null, action: () => { reset(); setRapportArrivage(null); setShowAccueil(false); setVue("form"); window.scrollTo(0, 0); } },
     ];
 
@@ -4288,34 +4287,33 @@ _PDF joint_`;
       <div style={{ minHeight: "100vh", background: bg, fontFamily: "'Syne', sans-serif", transition: "background 0.3s" }}>
         <style>{styles}</style>
 
-        {/* HEADER */}
-        <div style={{ background: headerBg, padding: "28px 20px 48px", position: "relative", overflow: "hidden" }}>
-          <div style={{ position: "absolute", top: -40, right: -40, width: 180, height: 180, borderRadius: "50%", background: "rgba(200,168,75,0.12)", pointerEvents: "none" }} />
-          <div style={{ position: "absolute", bottom: -30, left: -30, width: 130, height: 130, borderRadius: "50%", background: "rgba(200,168,75,0.08)", pointerEvents: "none" }} />
+        {/* HEADER compact */}
+        <div style={{ background: headerBg, padding: "20px 20px 36px", position: "relative", overflow: "hidden" }}>
+          <div style={{ position: "absolute", top: -40, right: -40, width: 140, height: 140, borderRadius: "50%", background: "rgba(200,168,75,0.12)", pointerEvents: "none" }} />
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
             <div>
-              <p style={{ margin: 0, fontSize: 13, color: "rgba(255,255,255,0.5)", letterSpacing: 1 }}>{today}</p>
-              <h1 style={{ margin: "4px 0 0", fontSize: 24, fontWeight: 800, color: "#fff" }}>
+              <p style={{ margin: 0, fontSize: 12, color: "rgba(255,255,255,0.5)", letterSpacing: 1 }}>{today}</p>
+              <h1 style={{ margin: "2px 0 0", fontSize: 21, fontWeight: 800, color: "#fff" }}>
                 {getHello()}, {user?.displayName?.split(" ")[0] || "!"} 👋
               </h1>
             </div>
             <div style={{ display: "flex", gap: 8 }}>
               <button onClick={() => setDarkMode(!darkMode)}
-                style={{ width: 38, height: 38, borderRadius: 10, border: "1px solid rgba(255,255,255,0.2)", background: "rgba(255,255,255,0.1)", cursor: "pointer", fontSize: 18, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                style={{ width: 34, height: 34, borderRadius: 9, border: "1px solid rgba(255,255,255,0.2)", background: "rgba(255,255,255,0.1)", cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center" }}>
                 {darkMode ? "☀️" : "🌙"}
               </button>
-              <button onClick={() => signOut(auth)} style={{ padding: "6px 12px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.2)", background: "rgba(255,255,255,0.08)", cursor: "pointer", fontSize: 11, color: "rgba(255,255,255,0.5)", fontFamily: "'Syne', sans-serif" }}>
+              <button onClick={() => signOut(auth)} style={{ padding: "5px 10px", borderRadius: 9, border: "1px solid rgba(255,255,255,0.2)", background: "rgba(255,255,255,0.08)", cursor: "pointer", fontSize: 11, color: "rgba(255,255,255,0.5)", fontFamily: "'Syne', sans-serif" }}>
                 Déco
               </button>
             </div>
           </div>
 
-          {/* STATS RAPIDES */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginTop: 20 }}>
+          {/* STATS RAPIDES — 2 colonnes sur mobile */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6, marginTop: 14 }}>
             {[
               { label: "En attente", value: nbAttente, color: "#fbbf24" },
-              { label: "Traités today", value: nbTraitesAujourdHui, color: "#34d399" },
-              { label: "Litiges ouverts", value: nbLitigesOuverts, color: "#f87171" },
+              { label: "Traités", value: nbTraitesAujourdHui, color: "#34d399" },
+              { label: "Litiges", value: nbLitigesOuverts, color: "#f87171" },
               { label: "Rapports", value: nbRapports, color: "#c8a84b" },
             ].map(s => (
               <div key={s.label} style={{ background: "rgba(255,255,255,0.1)", borderRadius: 12, padding: "10px 8px", textAlign: "center", backdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.15)" }}>
@@ -4345,22 +4343,22 @@ _PDF joint_`;
           </div>
         )}
 
-        {/* BOUTONS */}
-        <div style={{ maxWidth: 520, margin: "-24px auto 0", padding: "0 20px 60px", position: "relative" }}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {/* BOUTONS — plus compacts */}
+        <div style={{ maxWidth: 520, margin: "-18px auto 0", padding: "0 16px 100px", position: "relative" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {buttons.map((b, idx) => (
               <button key={idx} onClick={b.action}
-                style={{ display: "flex", alignItems: "center", gap: 16, padding: "16px 18px", borderRadius: 16, cursor: "pointer", border: `1.5px solid ${cardBorder}`, background: cardBg, textAlign: "left", width: "100%", fontFamily: "'Syne', sans-serif", boxShadow: darkMode ? "none" : "0 2px 10px rgba(0,0,0,0.06)", transition: "all 0.15s" }}
-                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = b.color; (e.currentTarget as HTMLElement).style.boxShadow = `0 4px 20px ${b.color}22`; (e.currentTarget as HTMLElement).style.transform = "translateY(-1px)"; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = cardBorder; (e.currentTarget as HTMLElement).style.boxShadow = darkMode ? "none" : "0 2px 10px rgba(0,0,0,0.06)"; (e.currentTarget as HTMLElement).style.transform = "none"; }}
+                style={{ display: "flex", alignItems: "center", gap: 14, padding: "13px 16px", borderRadius: 14, cursor: "pointer", border: `1.5px solid ${cardBorder}`, background: cardBg, textAlign: "left", width: "100%", fontFamily: "'Syne', sans-serif", boxShadow: darkMode ? "none" : "0 2px 8px rgba(0,0,0,0.05)", transition: "all 0.15s" }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = b.color; (e.currentTarget as HTMLElement).style.transform = "translateY(-1px)"; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = cardBorder; (e.currentTarget as HTMLElement).style.transform = "none"; }}
               >
-                <span style={{ fontSize: 24, width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center", background: b.color + "18", borderRadius: 12, flexShrink: 0 }}>{b.icon}</span>
+                <span style={{ fontSize: 20, width: 38, height: 38, display: "flex", alignItems: "center", justifyContent: "center", background: b.color + "18", borderRadius: 10, flexShrink: 0 }}>{b.icon}</span>
                 <div style={{ flex: 1 }}>
-                  <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color: textMain }}>{b.label}</p>
-                  <p style={{ margin: "2px 0 0", fontSize: 12, color: textSub }}>{b.sub}</p>
+                  <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: textMain }}>{b.label}</p>
+                  <p style={{ margin: "1px 0 0", fontSize: 11, color: textSub }}>{b.sub}</p>
                 </div>
-                {b.badge ? <span style={{ background: b.color, color: "#fff", fontSize: 12, fontWeight: 700, padding: "3px 9px", borderRadius: 20, flexShrink: 0 }}>{b.badge}</span> : null}
-                <span style={{ color: darkMode ? "#4a4a6a" : "#d1d5db", fontSize: 18, flexShrink: 0 }}>›</span>
+                {b.badge ? <span style={{ background: b.color, color: "#fff", fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 20, flexShrink: 0 }}>{b.badge}</span> : null}
+                <span style={{ color: darkMode ? "#4a4a6a" : "#d1d5db", fontSize: 16, flexShrink: 0 }}>›</span>
               </button>
             ))}
           </div>
@@ -4618,6 +4616,19 @@ _PDF joint_`;
       {/* POPUP ETIQUETTE MULTI-PALETTES */}
       {popupEtiquette && (
         <PopupEtiquetteMulti arrivage={popupEtiquette} onClose={() => setPopupEtiquette(null)} />
+      )}
+
+      {/* SCANNER FAB — visible sur toutes les pages */}
+      {!showScanner && !showPalette && (
+        <button
+          onClick={() => { setShowScanner(true); setShowAccueil(false); }}
+          style={{ position: "fixed", bottom: 24, right: 24, width: 58, height: 58, borderRadius: "50%", background: "#0a0a0a", border: "2.5px solid #c8a84b", cursor: "pointer", fontSize: 24, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 20px rgba(0,0,0,0.3)", zIndex: 900, transition: "transform 0.15s" }}
+          onMouseEnter={e => (e.currentTarget.style.transform = "scale(1.1)")}
+          onMouseLeave={e => (e.currentTarget.style.transform = "scale(1)")}
+          title="Scanner une palette"
+        >
+          📷
+        </button>
       )}
 
       {toast && (
