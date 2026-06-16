@@ -2216,17 +2216,24 @@ function StockApp({ onExit }: { onExit: () => void }) {
         if (!w) return;
         w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${title}</title><style>
           *{margin:0;padding:0;box-sizing:border-box}
-          body{font-family:Arial,sans-serif;background:#fff;padding:12mm}
-          @page{size:A4 landscape;margin:10mm}
-          @media print{body{padding:0}button{display:none!important}}
-          .print-btn{position:fixed;top:10px;right:10px;display:flex;gap:8px;z-index:9999}
+          body{font-family:Arial,sans-serif;background:#fff;padding:16px;width:277mm}
+          @page{size:297mm 210mm;margin:8mm}
+          @media print{
+            html,body{width:297mm;height:210mm}
+            body{padding:0}
+            .print-btn{display:none!important}
+          }
+          .print-btn{position:fixed;top:10px;right:10px;display:flex;gap:8px;z-index:9999;background:#fff;padding:6px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.15)}
           .print-btn button{padding:8px 16px;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700}
+          table{border-collapse:collapse;width:100%}
+          th,td{font-size:11px}
         </style></head><body>
         <div class="print-btn">
           <button onclick="window.print()" style="background:#c8a84b;color:#0a0a0a">🖨 Imprimer</button>
           <button onclick="window.close()" style="background:#f0f0f0;color:#333">✕ Fermer</button>
         </div>
         ${html}
+        <script>window.onload=function(){window.print()}</script>
         </body></html>`);
         w.document.close();
       };
