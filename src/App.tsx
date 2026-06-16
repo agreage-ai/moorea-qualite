@@ -2664,7 +2664,8 @@ const YUKON_ARTICLES_DEFAULT = [
   { id: "pac-choi", nom: "Pac Choi Vert x12", stockNom: "", unite: "colis", colisVente: 1, colisCommande: 1 },
 ];
 
-function YukonApp({ onClose }: { onClose: () => void }) {
+// Liste complète des articles moorea-stock pour la liaison
+const STOCK_LIST = ["","MINI AUBERGINE AFRIQUE DU SUD (BARQUETTE 200G X 6)","MINI BETTERAVE JAUNE AFRIQUE DU SUD (BARQUETTE 200G X 6)","MINI BETTERAVE ROSE AFRIQUE DU SUD (BARQUETTE 200G X 6)","MINI BETTERAVE ROUGE AFRIQUE DU SUD (BARQUETTE 200G X 6)","MINI CAROTTE AFRIQUE DU SUD (BARQUETTE 200G X 8)","MINI CAROTTE FANE AFRIQUE DU SUD (BARQUETTE 200G X 6)","MINI CAROTTE FANE AFRIQUE DU SUD (BARQUETTE 400G X 4)","MINI CAROTTE JAUNE AFRIQUE DU SUD (BARQUETTE 400G X 4)","MINI CAROTTE MULTICOLORE AFRIQUE DU SUD (BARQUETTE 200G X 6)","MINI CAROTTE MULTICOLORE ESPAGNE (BARQUETTE 200G X 6)","MINI CAROTTE VIOLETTE AFRIQUE DU SUD (BARQUETTE 400G X 4)","MINI COURGETTE AFRIQUE DU SUD (BARQUETTE 200G X 6)","MINI COURGETTE RONDE AFRIQUE DU SUD (BARQUETTE 200G X 6)","MINI FENOUIL ESPAGNE (BARQUETTE 200G X 6)","MINI FIGUE AFRIQUE DU SUD (BARQUETTE 160G X 6)","MINI LEGUMES MIXTE (BARQUETTE 200G X 8)","MINI LEGUMES MIXTE KENYA (BARQUETTE 200G X 8)","MINI LEGUMES PANACHE (BARQUETTE X 8)","MINI MAIS KENYA (BARQUETTE 125G X 12)","MINI NAVET (BARQUETTE 400G)","MINI NAVET AFRIQUE DU SUD (BARQUETTE 200G X 6)","MINI PANAIS ROYAUME UNI (VRAC 4KG)","MINI PATISSON JAUNE AFRIQUE DU SUD (BARQUETTE 200G X 6)","MINI PATISSON VERT AFRIQUE DU SUD (BARQUETTE 200G X 6)","MINI POIREAUX AFRIQUE DU SUD (BARQUETTE 200G X 6)","MINI POIREAUX ESPAGNE (BARQUETTE 200G X 6)","MINI POIVRON MIXTE ESPAGNE (200 GR X 12)","MINI POIVRON MIXTE ESPAGNE 2€ (BARQUETTE 200G X 12)"];
   const [page, setPage] = useState<"calcul" | "articles" | "recap">("calcul");
   const [articles, setArticles] = useState<any[]>([]);
   const [ventes, setVentes] = useState<Record<string, number>>({});
@@ -2875,11 +2876,16 @@ function YukonApp({ onClose }: { onClose: () => void }) {
                     {editArticle?.id === art.id ? (
                       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                         <input value={editArticle.nom} onChange={e => setEditArticle({ ...editArticle, nom: e.target.value })}
-                          style={{ flex: 1, padding: "6px 10px", border: "1.5px solid #c8a84b", borderRadius: 8, fontSize: 13 }} />
+                          style={{ flex: 1, minWidth: 120, padding: "6px 10px", border: "1.5px solid #c8a84b", borderRadius: 8, fontSize: 13 }} />
+                        <select value={editArticle.stockNom || ""} onChange={e => setEditArticle({ ...editArticle, stockNom: e.target.value })}
+                          style={{ flex: 2, minWidth: 180, padding: "6px 8px", border: "1.5px solid #16a34a", borderRadius: 8, fontSize: 12, background: "#fff" }}>
+                          <option value="">— Pas de liaison stock —</option>
+                          {STOCK_LIST.filter(s => s).map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
                         <input type="number" value={editArticle.colisVente} onChange={e => setEditArticle({ ...editArticle, colisVente: parseInt(e.target.value) || 1 })}
-                          style={{ width: 70, padding: "6px 8px", border: "1.5px solid #e8e0d0", borderRadius: 8, fontSize: 12 }} placeholder="Vente/colis" />
+                          style={{ width: 60, padding: "6px 8px", border: "1.5px solid #e8e0d0", borderRadius: 8, fontSize: 12 }} placeholder="×vente" />
                         <input type="number" value={editArticle.colisCommande} onChange={e => setEditArticle({ ...editArticle, colisCommande: parseInt(e.target.value) || 1 })}
-                          style={{ width: 70, padding: "6px 8px", border: "1.5px solid #e8e0d0", borderRadius: 8, fontSize: 12 }} placeholder="Cmd/colis" />
+                          style={{ width: 60, padding: "6px 8px", border: "1.5px solid #e8e0d0", borderRadius: 8, fontSize: 12 }} placeholder="×cmd" />
                         <button onClick={async () => {
                           const updated = articles.map(a => a.id === editArticle.id ? editArticle : a);
                           setArticles(updated);
@@ -2891,6 +2897,7 @@ function YukonApp({ onClose }: { onClose: () => void }) {
                     ) : (
                       <div>
                         <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: "#1a2e1a" }}>{art.nom}</p>
+                        {art.stockNom && <p style={{ margin: "1px 0 0", fontSize: 10, color: "#16a34a", fontWeight: 600 }}>📦 {art.stockNom}</p>}
                         {art.colisCommande > 1 && <p style={{ margin: 0, fontSize: 11, color: "#9ca3af" }}>Vendu ×{art.colisVente} · Commandé ×{art.colisCommande}</p>}
                       </div>
                     )}
