@@ -97,6 +97,27 @@ const styles = `
   .dark input::placeholder { color: var(--text2) !important; }
 `;
 
+// ─── HEADER UNIFORME ───
+function PageHeader({ titre, couleur = "#c8a84b", onBack, onHome }: { titre: string; couleur?: string; onBack?: () => void; onHome?: () => void }) {
+  return (
+    <div style={{ background: "#0a0a0a", borderBottom: `3px solid ${couleur}`, position: "sticky", top: 0, zIndex: 200 }}>
+      <div style={{ maxWidth: 800, margin: "0 auto", height: 56, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 16px" }}>
+        <div style={{ width: 80 }}>
+          {onBack && (
+            <button onClick={onBack} style={{ padding: "7px 12px", borderRadius: 9, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.06)", cursor: "pointer", fontSize: 13, color: "rgba(255,255,255,0.8)", fontFamily: "'Syne', sans-serif", whiteSpace: "nowrap" }}>← Retour</button>
+          )}
+        </div>
+        <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: couleur, fontFamily: "'Syne', sans-serif", textAlign: "center", flex: 1 }}>{titre}</p>
+        <div style={{ width: 80, display: "flex", justifyContent: "flex-end" }}>
+          {onHome && (
+            <button onClick={onHome} style={{ padding: "7px 12px", borderRadius: 9, border: "none", background: "#c8a84b", cursor: "pointer", fontSize: 12, fontWeight: 700, color: "#0a0a0a" }}>🏠</button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function NoteSelector({ value, onChange }: { value: number; onChange: (n: number) => void }) {
   return (
     <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
@@ -677,14 +698,7 @@ function ScannerQR({ onScan, onClose }: { onScan: (lot: string) => void; onClose
 
   return (
     <div style={{ position: "fixed", inset: 0, background: "#000", zIndex: 999, display: "flex", flexDirection: "column" }}>
-      {/* Header uniforme */}
-      <div style={{ background: "#0a0a0a", borderBottom: "3px solid #c8a84b", flexShrink: 0 }}>
-        <div style={{ height: 56, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 16px" }}>
-          <div style={{ width: 100 }}><button onClick={onClose} style={{ padding: "7px 12px", borderRadius: 9, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.06)", cursor: "pointer", fontSize: 13, color: "rgba(255,255,255,0.8)", fontFamily: "'Syne', sans-serif" }}>← Retour</button></div>
-          <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: "#c8a84b", fontFamily: "'Syne', sans-serif", textAlign: "center" }}>📷 Scanner QR palette</p>
-          <div style={{ width: 100, display: "flex", justifyContent: "flex-end" }}><button onClick={onClose} style={{ padding: "7px 12px", borderRadius: 9, border: "none", background: "#c8a84b", cursor: "pointer", fontSize: 12, fontWeight: 700, color: "#0a0a0a" }}>🏠</button></div>
-        </div>
-      </div>
+      <PageHeader titre="📷 Scanner QR palette" onBack={onClose} onHome={onClose} />
 
       {/* Caméra */}
       <div style={{ flex: 1, position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -798,19 +812,7 @@ function PalettePublique({ id }: { id: string }) {
   return (
     <div style={{ minHeight: "100vh", background: "#f5f3ee", fontFamily: "'Syne', sans-serif" }}>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
-      {/* Header uniforme noir */}
-      <div style={{ background: "#0a0a0a", borderBottom: "3px solid #c8a84b" }}>
-        <div style={{ maxWidth: 800, margin: "0 auto", height: 56, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 16px" }}>
-          <div style={{ width: 100 }}>
-            <button onClick={() => { window.history.replaceState({}, "", window.location.pathname); window.location.reload(); }}
-              style={{ padding: "7px 12px", borderRadius: 9, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.06)", cursor: "pointer", fontSize: 13, color: "rgba(255,255,255,0.8)", fontFamily: "'Syne', sans-serif" }}>← Retour</button>
-          </div>
-          <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: "#c8a84b", fontFamily: "'Syne', sans-serif", textAlign: "center", flex: 1 }}>
-            📦 MRA.{String(arrivage.lot_interne || "").padStart(4, "0")}
-          </p>
-          <div style={{ width: 100 }} />
-        </div>
-      </div>
+      <PageHeader titre={`📦 MRA.${String(arrivage.lot_interne || "").padStart(4, "0")}`} onBack={() => { window.history.replaceState({}, "", window.location.pathname); window.location.reload(); }} />
 
       <div style={{ maxWidth: 600, margin: "0 auto", padding: "20px 16px 60px" }}>
         {/* Fiche */}
@@ -1318,6 +1320,7 @@ function StockApp({ onExit }: { onExit: () => void }) {
 #stock-root .toggle-switch.gms input:checked + .toggle-slider{background:#c8a84b}
 #stock-root input[type=number]{-webkit-appearance:none;appearance:none}
 #stock-pdf-overlay{display:none;position:fixed;inset:0;background:#f5f3ee;z-index:700;overflow-y:auto}
+@media print{#stock-pdf-overlay{display:block!important;position:static;background:#fff}#stock-root>*:not(#stock-pdf-overlay){display:none!important}@page{size:A4 landscape;margin:10mm}}
 #stock-fusion-bar{display:none;position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#0a0a0a;color:#fff;padding:12px 24px;border-radius:14px;box-shadow:0 8px 24px rgba(0,0,0,.3);align-items:center;gap:12px;z-index:300;white-space:nowrap}
     `;
     document.head.appendChild(styleEl);
@@ -2779,24 +2782,22 @@ function YukonApp({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     const loadSessions = async () => {
       try {
-        const { getFirestore, collection, getDocs, query, orderBy, limit } = await import("firebase/firestore");
+        const { getFirestore, collection, getDocs, query, orderBy, limit, doc, getDoc } = await import("firebase/firestore");
         const { initializeApp, getApps } = await import("firebase/app");
         const stockCfg = { apiKey: "AIzaSyDETa9aJzOdVAMpDLMv8inFKZ921yiCzY8", authDomain: "moorea-stock.firebaseapp.com", projectId: "moorea-stock", storageBucket: "moorea-stock.firebasestorage.app", messagingSenderId: "254920745129", appId: "1:254920745129:web:fa14e2d3b53a8e6b9c9f5a" };
         const existing = getApps().find((a: any) => a.name === "moorea-stock");
         const stockApp = existing ?? initializeApp(stockCfg, "moorea-stock");
         const db2 = getFirestore(stockApp);
-        const snap = await getDocs(query(collection(db2, "comptages"), orderBy("createdAt", "desc"), limit(20)));
+
+        // Charge la liste des sessions depuis la collection "stocks"
+        const stocksSnap = await getDocs(query(collection(db2, "stocks"), orderBy("ts", "desc"), limit(20)));
         const loaded: any[] = [];
-        snap.forEach(d => {
+        stocksSnap.forEach(d => {
           const s = d.data();
-          if (s.articles?.length > 0) {
-            const date = s.date || new Date((s.createdAt?.seconds || 0) * 1000).toLocaleDateString("fr-FR");
-            const equipe = s.equipe || s.team || "";
-            loaded.push({ id: d.id, date, equipe, articles: s.articles, nb: s.articles.length });
-          }
+          loaded.push({ id: d.id, date: s.date || d.id, equipe: s.equipe || "", label: `${s.date || d.id}${s.equipe ? " · " + s.equipe : ""}` });
         });
         setSessions(loaded);
-      } catch (e) { console.log("moorea-stock non disponible", e); }
+      } catch (e) { console.log("moorea-stock sessions non disponibles", e); }
     };
     loadSessions();
   }, []);
@@ -2836,18 +2837,7 @@ function YukonApp({ onClose }: { onClose: () => void }) {
     <div style={{ minHeight: "100vh", background: bg, fontFamily: "'Syne', sans-serif" }}>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
 
-      {/* HEADER */}
-      <div style={{ background: "#0a0a0a", borderBottom: "3px solid #16a34a" }}>
-        <div style={{ maxWidth: 800, margin: "0 auto", height: 56, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 16px" }}>
-          <div style={{ width: 100 }}>
-            <button onClick={onClose} style={{ padding: "7px 12px", borderRadius: 9, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.06)", cursor: "pointer", fontSize: 13, color: "rgba(255,255,255,0.8)", fontFamily: "'Syne', sans-serif" }}>← Retour</button>
-          </div>
-          <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: "#16a34a", fontFamily: "'Syne', sans-serif", textAlign: "center", flex: 1 }}>🌿 Besoins Yukon</p>
-          <div style={{ width: 100, display: "flex", justifyContent: "flex-end" }}>
-            <button onClick={onClose} style={{ padding: "7px 12px", borderRadius: 9, border: "none", background: "#c8a84b", cursor: "pointer", fontSize: 12, fontWeight: 700, color: "#0a0a0a" }}>🏠</button>
-          </div>
-        </div>
-      </div>
+      <PageHeader titre="🌿 Besoins Yukon" couleur="#16a34a" onBack={onClose} onHome={onClose} />
 
       {/* SOUS-NAV */}
       <div style={{ background: "#fff", borderBottom: "1px solid #e8e0d0", display: "flex", justifyContent: "center", gap: 4, padding: "8px 16px" }}>
@@ -2886,26 +2876,56 @@ function YukonApp({ onClose }: { onClose: () => void }) {
               <p style={{ margin: "0 0 8px", fontSize: 13, fontWeight: 700, color: "#1a2e1a" }}>📦 Choisir un inventaire</p>
               {sessions.length > 0 ? (
                 <select onChange={async e => {
-                  const session = sessions.find(s => s.id === e.target.value);
+                  const sessionId = e.target.value;
+                  if (!sessionId) return;
+                  const session = sessions.find(s => s.id === sessionId);
                   if (!session) return;
-                  const newStocks: Record<string, number> = {};
-                  for (const art of session.articles) {
-                    const nom = art.article?.toUpperCase().trim() || "";
-                    const compte = art.compte ?? art.nb_colis ?? 0;
-                    if (nom) newStocks[nom] = compte;
-                  }
-                  setStocks(newStocks);
-                  setStockDate(session.date);
-                  const entryId = session.date.replace(/\//g, "-");
-                  await update(ref(db, `yukon/stocks_manuels/${entryId}`), { date: session.date, stocks: newStocks });
+                  try {
+                    const { getFirestore, collection, getDocs, query, where } = await import("firebase/firestore");
+                    const { initializeApp, getApps } = await import("firebase/app");
+                    const stockCfg = { apiKey: "AIzaSyDETa9aJzOdVAMpDLMv8inFKZ921yiCzY8", authDomain: "moorea-stock.firebaseapp.com", projectId: "moorea-stock", storageBucket: "moorea-stock.firebasestorage.app", messagingSenderId: "254920745129", appId: "1:254920745129:web:fa14e2d3b53a8e6b9c9f5a" };
+                    const existing = getApps().find((a: any) => a.name === "moorea-stock");
+                    const stockApp = existing ?? initializeApp(stockCfg, "moorea-stock");
+                    const db2 = getFirestore(stockApp);
+                    // Charge les comptages de cette session (GMS + PRESTIGE)
+                    const snap = await getDocs(query(collection(db2, "comptages"), where("sessionId", "==", sessionId)));
+                    const newStocks: Record<string, number> = {};
+                    snap.forEach(d => {
+                      const data = d.data();
+                      const arts = data.data || data.articles || [];
+                      arts.forEach((art: any) => {
+                        const nom = (art.article || "").toUpperCase().trim();
+                        const compte = art.compte ?? art.nb_colis ?? 0;
+                        if (nom && compte > 0) newStocks[nom] = (newStocks[nom] || 0) + compte;
+                      });
+                    });
+                    // Fallback : cherche par id_GMS et id_PRESTIGE
+                    if (Object.keys(newStocks).length === 0) {
+                      for (const team of ["GMS", "PRESTIGE"]) {
+                        const { doc: fDoc, getDoc: fGetDoc } = await import("firebase/firestore");
+                        const docSnap = await fGetDoc(fDoc(db2, "comptages", `${sessionId}_${team}`));
+                        if (docSnap.exists()) {
+                          const data = docSnap.data();
+                          const arts = data.data || data.articles || [];
+                          arts.forEach((art: any) => {
+                            const nom = (art.article || "").toUpperCase().trim();
+                            const compte = art.compte ?? art.nb_colis ?? 0;
+                            if (nom && compte > 0) newStocks[nom] = (newStocks[nom] || 0) + compte;
+                          });
+                        }
+                      }
+                    }
+                    setStocks(newStocks);
+                    setStockDate(session.date);
+                    const entryId = session.date.replace(/\//g, "-");
+                    await update(ref(db, `yukon/stocks_manuels/${entryId}`), { date: session.date, stocks: newStocks });
+                  } catch (e) { console.log("Erreur chargement comptages", e); }
                 }}
                   defaultValue=""
                   style={{ width: "100%", padding: "10px 12px", border: "1.5px solid #16a34a", borderRadius: 10, fontSize: 13, background: "#fff", cursor: "pointer" }}>
-                  <option value="" disabled>{stockDate ? `✓ Inventaire du ${stockDate}` : "— Sélectionner un inventaire —"}</option>
+                  <option value="" disabled>{stockDate ? `✓ Stock du ${stockDate}` : "— Sélectionner un inventaire —"}</option>
                   {sessions.map(s => (
-                    <option key={s.id} value={s.id}>
-                      {s.date}{s.equipe ? ` · ${s.equipe}` : ""} · {s.nb} articles
-                    </option>
+                    <option key={s.id} value={s.id}>{s.label}</option>
                   ))}
                 </select>
               ) : (
@@ -4944,16 +4964,7 @@ _PDF joint_`;
       <>{fabScanner}
       <div style={{ minHeight: "100vh", background: "#f5f3ee", fontFamily: "'Syne', sans-serif" }}>
         <style>{styles}</style>
-        <div style={{ background: "#0a0a0a", borderBottom: "3px solid #dc2626", position: "sticky", top: 0, zIndex: 100 }}>
-          <div style={{ maxWidth: 800, margin: "0 auto", height: 56, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 16px" }}>
-            <div style={{ width: 100 }}><button onClick={() => { setShowLitiges(false); setShowAccueil(true); }} style={{ padding: "7px 12px", borderRadius: 9, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.06)", cursor: "pointer", fontSize: 13, color: "rgba(255,255,255,0.8)", fontFamily: "'Syne', sans-serif" }}>← Retour</button></div>
-            <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: "#dc2626", fontFamily: "'Syne', sans-serif", textAlign: "center", flex: 1 }}>⚠️ Litiges Moorea</p>
-            <div style={{ width: 100, display: "flex", justifyContent: "flex-end", gap: 6 }}>
-              <button onClick={() => { setShowLitiges(false); setShowAccueil(true); }} style={{ padding: "7px 12px", borderRadius: 9, border: "none", background: "#c8a84b", cursor: "pointer", fontSize: 12, fontWeight: 700, color: "#0a0a0a" }}>🏠</button>
-              <button onClick={() => signOut(auth)} style={{ padding: "7px 10px", borderRadius: 9, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.06)", cursor: "pointer", fontSize: 11, color: "rgba(255,255,255,0.5)" }}>Déco</button>
-            </div>
-          </div>
-        </div>
+        <PageHeader titre="⚠️ Litiges Moorea" couleur="#dc2626" onBack={() => { setShowLitiges(false); setShowAccueil(true); }} onHome={() => { setShowLitiges(false); setShowAccueil(true); }} />
 
         {/* 2 gros boutons */}
         <div style={{ maxWidth: 520, margin: "-24px auto 0", padding: "0 20px 60px", position: "relative" }}>
@@ -5024,17 +5035,7 @@ _PDF joint_`;
       <>{fabScanner}
       <div style={{ minHeight: "100vh", background: "#f5f3ee", fontFamily: "'Syne', sans-serif" }}>
         <style>{styles}</style>
-
-        {/* Header uniforme */}
-        <div style={{ background: "#0a0a0a", borderBottom: "3px solid #3b82f6", position: "sticky", top: 0, zIndex: 100 }}>
-          <div style={{ maxWidth: 800, margin: "0 auto", height: 56, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 16px" }}>
-            <div style={{ width: 100 }}><button onClick={() => { setShowRecherche(false); setShowAccueil(true); }} style={{ padding: "7px 12px", borderRadius: 9, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.06)", cursor: "pointer", fontSize: 13, color: "rgba(255,255,255,0.8)", fontFamily: "'Syne', sans-serif" }}>← Retour</button></div>
-            <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: "#3b82f6", fontFamily: "'Syne', sans-serif", textAlign: "center", flex: 1 }}>🔍 Chercher un lot</p>
-            <div style={{ width: 100, display: "flex", justifyContent: "flex-end", gap: 6 }}>
-              <button onClick={() => { setShowRecherche(false); setShowAccueil(true); }} style={{ padding: "7px 12px", borderRadius: 9, border: "none", background: "#c8a84b", cursor: "pointer", fontSize: 12, fontWeight: 700, color: "#0a0a0a" }}>🏠</button>
-            </div>
-          </div>
-        </div>
+        <PageHeader titre="🔍 Chercher un lot" couleur="#3b82f6" onBack={() => { setShowRecherche(false); setShowAccueil(true); }} onHome={() => { setShowRecherche(false); setShowAccueil(true); }} />
 
         <div style={{ maxWidth: 600, margin: "0 auto", padding: "16px 20px 60px" }}>
           {/* Barre de recherche */}
@@ -5287,39 +5288,11 @@ _PDF joint_`;
       )}
 
       {/* HEADER UNIFORME */}
-      <div style={{ background: "#0a0a0a", padding: "0 16px", marginBottom: 0, borderBottom: "3px solid #c8a84b", position: "sticky", top: 0, zIndex: 200 }}>
-        <div style={{ maxWidth: 800, margin: "0 auto", height: 56, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-          {/* GAUCHE — bouton retour contextuel */}
-          <div style={{ width: 100, display: "flex", justifyContent: "flex-start" }}>
-            {vue === "form" && (
-              <button onClick={() => setVue("historique" as any)} style={{ padding: "7px 12px", borderRadius: 9, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.06)", cursor: "pointer", fontSize: 13, color: "rgba(255,255,255,0.8)", fontFamily: "'Syne', sans-serif", whiteSpace: "nowrap" }}>← Retour</button>
-            )}
-            {vue === "historique" && (
-              <button onClick={() => { setVue("__none__" as any); setPageMode("arrivages"); }} style={{ padding: "7px 12px", borderRadius: 9, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.06)", cursor: "pointer", fontSize: 13, color: "rgba(255,255,255,0.8)", fontFamily: "'Syne', sans-serif", whiteSpace: "nowrap" }}>← Retour</button>
-            )}
-            {vue !== "form" && vue !== "historique" && (
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <span style={{ fontSize: 18 }}>🍃</span>
-                <span style={{ fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: 13, color: "#c8a84b", textTransform: "uppercase", letterSpacing: "1.5px" }}>Moorea</span>
-              </div>
-            )}
-          </div>
-          {/* CENTRE — titre page */}
-          <p style={{ margin: 0, fontSize: 12, color: "rgba(255,255,255,0.5)", fontFamily: "'Syne', sans-serif", textAlign: "center", flex: 1 }}>
-            {vue === "form" ? "Nouveau rapport" :
-             vue === "historique" ? "Rapports qualité" :
-             vue === "archives" ? "Archives" :
-             pageMode === "arrivages" ? "Pointer arrivage" :
-             pageMode === "historique_arr" ? "Historique arrivages" :
-             ""}
-          </p>
-          {/* DROITE — accueil + déco */}
-          <div style={{ width: 100, display: "flex", justifyContent: "flex-end", gap: 6 }}>
-            <button onClick={() => { setShowAccueil(true); setShowLitiges(false); setShowRecherche(false); setShowStock(false); }} style={{ padding: "7px 12px", borderRadius: 9, border: "none", background: "#c8a84b", cursor: "pointer", fontSize: 12, fontWeight: 700, color: "#0a0a0a", fontFamily: "'Syne', sans-serif", whiteSpace: "nowrap" }}>🏠</button>
-            <button onClick={() => signOut(auth)} title={user.email} style={{ padding: "7px 10px", borderRadius: 9, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.06)", cursor: "pointer", fontSize: 11, color: "rgba(255,255,255,0.5)", fontFamily: "'Syne', sans-serif", whiteSpace: "nowrap" }}>Déco</button>
-          </div>
-        </div>
-      </div>
+      <PageHeader
+        titre={vue === "form" ? "Nouveau rapport" : vue === "historique" ? "Rapports qualité" : pageMode === "arrivages" ? "Pointer arrivage" : pageMode === "historique_arr" ? "Historique arrivages" : "Moorea"}
+        onBack={vue === "form" ? () => setVue("historique" as any) : vue === "historique" ? () => { setVue("__none__" as any); setPageMode("arrivages"); } : undefined}
+        onHome={() => { setShowAccueil(true); setShowLitiges(false); setShowRecherche(false); setShowStock(false); }}
+      />
 
       <div className="content-wrap">
 
