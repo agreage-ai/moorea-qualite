@@ -2656,7 +2656,7 @@ const YUKON_ARTICLES_DEFAULT = [
   { id: "aubergine-200", nom: "Aubergine 200", unite: "colis", colisVente: 1, colisCommande: 1 },
 ];
 
-function YukonApp({ onClose, db: dbP, ref_: refP, onValue_: onValueP, update_: updateP, push_: pushP, remove_: removeP }: any) {
+function YukonApp({ onClose }: { onClose: () => void }) {
   const [page, setPage] = useState<"calcul" | "articles" | "recap">("calcul");
   const [articles, setArticles] = useState<any[]>([]);
   const [ventes, setVentes] = useState<Record<string, number>>({});
@@ -2669,13 +2669,22 @@ function YukonApp({ onClose, db: dbP, ref_: refP, onValue_: onValueP, update_: u
   const [loading, setLoading] = useState(true);
   const [stockDate, setStockDate] = useState("");
 
+  const getWeekKey = (offset = 0) => {
+    const d = new Date();
+    d.setDate(d.getDate() + offset * 7);
+    const yr = d.getFullYear();
+    const jan1 = new Date(yr, 0, 1);
+    const wk = Math.ceil(((d.getTime() - jan1.getTime()) / 86400000 + jan1.getDay() + 1) / 7);
+    return `${yr}-W${String(wk).padStart(2, "0")}`;
+  };
+
   // Charger articles depuis Firebase ou défaut
   useEffect(() => {
-    const unsub = onValueP(refP(dbP, "yukon/articles"), (snap: any) => {
+    const unsub = onValue(ref(db, "yukon/articles"), (snap: any) => {
       if (snap.exists()) setArticles(Object.values(snap.val()));
       else {
         setArticles(YUKON_ARTICLES_DEFAULT);
-        updateP(refP(dbP, "yukon/articles"), Object.fromEntries(YUKON_ARTICLES_DEFAULT.map(a => [a.id, a])));
+        update(ref(db, "yukon/articles"), Object.fromEntries(YUKON_ARTICLES_DEFAULT.map(a => [a.id, a])));
       }
     });
     return () => unsub();
@@ -2684,40 +2693,30 @@ function YukonApp({ onClose, db: dbP, ref_: refP, onValue_: onValueP, update_: u
   // Charger ventes de la semaine passée depuis Firebase
   useEffect(() => {
     const weekKey = getWeekKey(-1);
-    const unsub = onValueP(refP(dbP, `yukon/ventes/${weekKey}`), (snap: any) => {
+    const unsub = onValue(ref(db, `yukon/ventes/${weekKey}`), (snap: any) => {
       if (snap.exists()) setVentes(snap.val());
       setLoading(false);
     });
     return () => unsub();
   }, []);
 
-  // Charger le dernier stock moorea-stock
+  // Charger le dernier stock manuel
   useEffect(() => {
-    const unsub = onValueP(refP(dbP, "yukon/stocks_manuels"), (snap: any) => {
+    const unsub = onValue(ref(db, "yukon/stocks_manuels"), (snap: any) => {
       if (snap.exists()) {
         const all = Object.values(snap.val()) as any[];
-        all.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
-        if (all.length > 0) {
-          setStocks(all[0].stocks || {});
-          setStockDate(all[0].date || "");
-        }
+        all.sort((a: any, b: any) => (b.date || "").localeCompare(a.date || ""));
+        if (all.length > 0) { setStocks((all[0] as any).stocks || {}); setStockDate((all[0] as any).date || ""); }
       }
+      setLoading(false);
     });
     return () => unsub();
   }, []);
 
-  const getWeekKey = (offset = 0) => {
-    const d = new Date();
-    d.setDate(d.getDate() + offset * 7);
-    const yr = d.getFullYear();
-    const wk = Math.ceil(((d.getTime() - new Date(yr, 0, 1).getTime()) / 86400000 + new Date(yr, 0, 1).getDay() + 1) / 7);
-    return `${yr}-W${String(wk).padStart(2, "0")}`;
-  };
-
   const saveVentes = async (newVentes: Record<string, number>) => {
     setVentes(newVentes);
     const weekKey = getWeekKey(-1);
-    await updateP(refP(dbP, `yukon/ventes/${weekKey}`), newVentes);
+    await update(ref(db, `yukon/ventes/${weekKey}`), newVentes);
   };
 
   const calcCommande = (art: any) => {
@@ -2858,7 +2857,7 @@ function YukonApp({ onClose, db: dbP, ref_: refP, onValue_: onValueP, update_: u
                         <button onClick={async () => {
                           const updated = articles.map(a => a.id === editArticle.id ? editArticle : a);
                           setArticles(updated);
-                          await updateP(refP(dbP, `yukon/articles/${editArticle.id}`), editArticle);
+                          await update(ref(db, `yukon/articles/${editArticle.id}`), editArticle);
                           setEditArticle(null);
                         }} style={{ padding: "6px 12px", borderRadius: 8, border: "none", background: "#16a34a", color: "#fff", cursor: "pointer", fontWeight: 700, fontSize: 12 }}>✓</button>
                         <button onClick={() => setEditArticle(null)} style={{ padding: "6px 12px", borderRadius: 8, border: "1px solid #e8e0d0", background: "#f9fafb", color: "#6b7280", cursor: "pointer", fontSize: 12 }}>✕</button>
@@ -2877,7 +2876,7 @@ function YukonApp({ onClose, db: dbP, ref_: refP, onValue_: onValueP, update_: u
                         if (!window.confirm(`Supprimer "${art.nom}" ?`)) return;
                         const updated = articles.filter(a => a.id !== art.id);
                         setArticles(updated);
-                        await removeP(refP(dbP, `yukon/articles/${art.id}`));
+                        await remove(ref(db, `yukon/articles/${art.id}`));
                       }} style={{ padding: "5px 10px", borderRadius: 8, border: "1px solid #fca5a5", background: "#fef2f2", cursor: "pointer", fontSize: 12, color: "#dc2626" }}>🗑</button>
                     </div>
                   )}
@@ -2901,7 +2900,7 @@ function YukonApp({ onClose, db: dbP, ref_: refP, onValue_: onValueP, update_: u
                   const art = { ...nouvelArticle, id };
                   const updated = [...articles, art];
                   setArticles(updated);
-                  await updateP(refP(dbP, `yukon/articles/${id}`), art);
+                  await update(ref(db, `yukon/articles/${id}`), art);
                   setNouvelArticle({ nom: "", colisVente: 1, colisCommande: 1 });
                 }} style={{ padding: "8px 16px", borderRadius: 10, border: "none", background: "#16a34a", color: "#fff", cursor: "pointer", fontWeight: 700, fontSize: 13 }}>
                   Ajouter
@@ -4684,7 +4683,7 @@ _PDF joint_`;
   const [showYukon, setShowYukon] = useState(false);
 
   if (showYukon) {
-    return <>{fabScanner}<YukonApp onClose={() => { setShowYukon(false); setShowAccueil(true); }} db={db} ref_={ref} onValue_={onValue} update_={update} push_={push} remove_={remove} /></>;
+    return <>{fabScanner}<YukonApp onClose={() => { setShowYukon(false); setShowAccueil(true); }} /></>;
   }
 
   if (showAccueil) {
