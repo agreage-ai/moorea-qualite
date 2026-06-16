@@ -1544,7 +1544,7 @@ function StockApp({ onExit }: { onExit: () => void }) {
 
 <div id="stock-toast"></div>
 <button id="stock-scan-fab" onclick="sScannerPalette()" style="display:none;position:fixed;bottom:90px;right:20px;width:52px;height:52px;border-radius:50%;background:#0a0a0a;border:2.5px solid #c8a84b;cursor:pointer;font-size:22px;z-index:299;box-shadow:0 4px 16px rgba(0,0,0,0.3)">📷</button>
-<button id="stock-calc-fab" onclick="document.getElementById('stock-calc-modal').classList.toggle('open')">🧮</button>
+<button id="stock-calc-fab" onclick="document.getElementById('stock-calc-modal').classList.toggle('open')" style="display:none">🧮</button>
 <div id="stock-calc-modal">
   <div class="calc-screen"><div class="expr" id="s-calc-expr"></div><div class="result" id="s-calc-result">0</div></div>
   <div class="calc-grid">
@@ -1671,7 +1671,7 @@ function StockApp({ onExit }: { onExit: () => void }) {
           if (btn) btn.classList.toggle("active", id === p);
         });
         const fab = document.getElementById("stock-calc-fab");
-        if (fab) fab.classList.toggle("visible", p === "comptage");
+        if (fab) (fab as HTMLElement).style.display = p === "comptage" ? "flex" : "none";
         const scanFab = document.getElementById("stock-scan-fab");
         if (scanFab) scanFab.style.display = p === "comptage" ? "flex" : "none";
         if (p === "home") renderStockList();
@@ -2211,6 +2211,26 @@ function StockApp({ onExit }: { onExit: () => void }) {
       };
 
       // PDF
+      const openPdfWindow = (html: string, title: string) => {
+        const w = window.open("", "_blank");
+        if (!w) return;
+        w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${title}</title><style>
+          *{margin:0;padding:0;box-sizing:border-box}
+          body{font-family:Arial,sans-serif;background:#fff;padding:12mm}
+          @page{size:A4 landscape;margin:10mm}
+          @media print{body{padding:0}button{display:none!important}}
+          .print-btn{position:fixed;top:10px;right:10px;display:flex;gap:8px;z-index:9999}
+          .print-btn button{padding:8px 16px;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700}
+        </style></head><body>
+        <div class="print-btn">
+          <button onclick="window.print()" style="background:#c8a84b;color:#0a0a0a">🖨 Imprimer</button>
+          <button onclick="window.close()" style="background:#f0f0f0;color:#333">✕ Fermer</button>
+        </div>
+        ${html}
+        </body></html>`);
+        w.document.close();
+      };
+
       (window as any).sExportPDF = () => {
         const now = new Date().toLocaleString("fr-FR");
         const sorted = [...articles].sort((a, b) => a.article.localeCompare(b.article, "fr"));
@@ -2225,11 +2245,8 @@ function StockApp({ onExit }: { onExit: () => void }) {
         const manq = sorted.filter(a => counted(a) && ecart(a) < 0).length;
         const exc = sorted.filter(a => counted(a) && ecart(a) > 0).length;
         const nc = sorted.filter(a => !counted(a)).length;
-        const html = `<h1 style="font-size:14px;font-weight:bold;margin:0">Moorea · Inventaire ${currentTeam}</h1><div style="font-size:10px;color:#444;margin:3px 0 10px">${now} · ${sorted.length} articles · Manquants: ${manq} · Excédents: ${exc} · Non comptés: ${nc}</div><table style="width:100%;border-collapse:collapse"><thead>${thead}</thead><tbody>${sorted.map(row).join("")}</tbody></table>`;
-        const pdfContent = document.getElementById("stock-pdf-content");
-        const pdfOverlay = document.getElementById("stock-pdf-overlay");
-        if (pdfContent) pdfContent.innerHTML = html;
-        if (pdfOverlay) pdfOverlay.style.display = "block";
+        const html = `<h1 style="font-size:14px;font-weight:bold;margin:0 0 4px">Moorea · Inventaire ${currentTeam}</h1><div style="font-size:10px;color:#444;margin:3px 0 10px">${now} · ${sorted.length} articles · Manquants: ${manq} · Excédents: ${exc} · Non comptés: ${nc}</div><table style="width:100%;border-collapse:collapse"><thead>${thead}</thead><tbody>${sorted.map(row).join("")}</tbody></table>`;
+        openPdfWindow(html, `Moorea · Inventaire ${currentTeam}`);
       };
 
       // PDF depuis stock existant
@@ -2260,10 +2277,7 @@ function StockApp({ onExit }: { onExit: () => void }) {
           const section = (title: string, color: string, arr: any[], hl: boolean) => arr.length ? `<div style="font-size:11px;font-weight:700;text-transform:uppercase;color:${color};padding:12px 0 6px">${title} (${arr.length})</div><table style="width:100%;border-collapse:collapse"><thead>${thead}</thead><tbody>${arr.map(a => row(a, hl)).join("")}</tbody></table>` : "";
           const now = new Date().toLocaleString("fr-FR");
           const html = `<h1 style="font-size:17px;font-weight:700;color:#c8a84b;margin:0">🌿 Moorea · Inventaire ${team}</h1><div style="font-size:12px;color:#6b7280;margin:3px 0 18px">${s.dateLabel} · ${teamArts.length} articles · Imprimé le ${now}</div>${section("▼ Manquants", "#dc2626", manq, true)}${section("▲ Excédents", "#b45309", exc, true)}${manq.length === 0 && exc.length === 0 ? `<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:9px 13px;font-size:13px;color:#15803d;margin-bottom:14px">✓ Aucun écart</div>` : ""}${section("⚡ Non comptés", "#6b7280", nc, false)}${section("✓ Articles OK", "#15803d", ok, false)}`;
-          const pdfContent = document.getElementById("stock-pdf-content");
-          const pdfOverlay = document.getElementById("stock-pdf-overlay");
-          if (pdfContent) pdfContent.innerHTML = html;
-          if (pdfOverlay) pdfOverlay.style.display = "block";
+          openPdfWindow(html, `Moorea · Inventaire ${team}`);
         } catch { toast("Erreur PDF"); }
       };
 
@@ -4768,7 +4782,7 @@ _PDF joint_`;
   };
 
   // ─── FAB SCANNER GLOBAL ─── (avant tous les return de page)
-  const fabScanner = !showScanner && !showPalette && (
+  const fabScanner = !showScanner && !showPalette && !showStock && (
     <button
       onClick={() => { setScannerMode("palette"); setShowScanner(true); setShowAccueil(false); }}
       style={{ position: "fixed", bottom: 24, right: 24, width: 58, height: 58, borderRadius: "50%", background: "#0a0a0a", border: "2.5px solid #c8a84b", cursor: "pointer", fontSize: 24, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 20px rgba(0,0,0,0.3)", zIndex: 9999, transition: "transform 0.15s" }}
