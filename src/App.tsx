@@ -376,16 +376,20 @@ function ProduitRow({ arrivage, onValidate, onDelete, onOuvreRapport, selectMode
 function FournisseurBlock({ fournisseur, produits, traites = [], onValidate, onDelete, onOuvreRapport, selectMode, selectedArrivages, onToggleSelect }: any) {
   const [open, setOpen] = useState(false);
   const nbTraites = traites.length;
+  const allDone = produits.length === 0 && nbTraites > 0;
+  const headerBg = allDone ? "#f0fdf4" : "#faf8f3";
+  const headerBorder = allDone ? "1px solid #bbf7d0" : "none";
+  const nomColor = allDone ? "#15803d" : "#1a2e1a";
   return (
-    <div style={{ background: "#fff", borderRadius: 14, marginBottom: 10, overflow: "hidden", boxShadow: "0 2px 12px rgba(0,0,0,0.06)" }}>
-      <div onClick={() => setOpen(!open)} style={{ padding: "11px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", background: "#faf8f3", borderBottom: open ? "1px solid #e8e0d0" : "none" }}>
+    <div style={{ background: "#fff", borderRadius: 14, marginBottom: 10, overflow: "hidden", boxShadow: "0 2px 12px rgba(0,0,0,0.06)", border: allDone ? "1.5px solid #bbf7d0" : "1.5px solid transparent" }}>
+      <div onClick={() => setOpen(!open)} style={{ padding: "11px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", background: headerBg, borderBottom: open ? "1px solid #e8e0d0" : headerBorder }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <span>🏭</span>
-          <span style={{ fontWeight: 700, fontSize: 14, color: "#1a2e1a", fontFamily: "'Syne', sans-serif" }}>{fournisseur}</span>
+          <span>{allDone ? "✅" : "🏭"}</span>
+          <span style={{ fontWeight: 700, fontSize: 14, color: nomColor, fontFamily: "'Syne', sans-serif" }}>{fournisseur}</span>
           {produits.length > 0 && <span style={{ fontSize: 12, background: "#fffbeb", color: "#d97706", padding: "2px 8px", borderRadius: 20, fontWeight: 600 }}>{produits.length} en attente</span>}
           {nbTraites > 0 && <span style={{ fontSize: 12, background: "#f0fdf4", color: "#16a34a", padding: "2px 8px", borderRadius: 20, fontWeight: 600 }}>{nbTraites} traité{nbTraites > 1 ? "s" : ""}</span>}
         </div>
-        <span style={{ fontSize: 18, color: "#c8a84b", fontWeight: 700, transform: open ? "rotate(90deg)" : "none", transition: "transform 0.2s", display: "inline-block" }}>›</span>
+        <span style={{ fontSize: 18, color: allDone ? "#16a34a" : "#c8a84b", fontWeight: 700, transform: open ? "rotate(90deg)" : "none", transition: "transform 0.2s", display: "inline-block" }}>›</span>
       </div>
       {open && (
         <div style={{ padding: "12px 14px" }}>
