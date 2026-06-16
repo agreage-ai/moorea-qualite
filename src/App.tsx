@@ -373,19 +373,31 @@ function ProduitRow({ arrivage, onValidate, onDelete, onOuvreRapport, selectMode
   );
 }
 
-function FournisseurBlock({ fournisseur, produits, onValidate, onDelete, onOuvreRapport, selectMode, selectedArrivages, onToggleSelect }: any) {
+function FournisseurBlock({ fournisseur, produits, traites = [], onValidate, onDelete, onOuvreRapport, selectMode, selectedArrivages, onToggleSelect }: any) {
   const [open, setOpen] = useState(false);
+  const nbTraites = traites.length;
   return (
     <div style={{ background: "#fff", borderRadius: 14, marginBottom: 10, overflow: "hidden", boxShadow: "0 2px 12px rgba(0,0,0,0.06)" }}>
       <div onClick={() => setOpen(!open)} style={{ padding: "11px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", background: "#faf8f3", borderBottom: open ? "1px solid #e8e0d0" : "none" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <span>🏭</span>
           <span style={{ fontWeight: 700, fontSize: 14, color: "#1a2e1a", fontFamily: "'Syne', sans-serif" }}>{fournisseur}</span>
-          <span style={{ fontSize: 12, background: "#fffbeb", color: "#d97706", padding: "2px 8px", borderRadius: 20, fontWeight: 600 }}>{produits.length} article{produits.length > 1 ? "s" : ""}</span>
+          {produits.length > 0 && <span style={{ fontSize: 12, background: "#fffbeb", color: "#d97706", padding: "2px 8px", borderRadius: 20, fontWeight: 600 }}>{produits.length} en attente</span>}
+          {nbTraites > 0 && <span style={{ fontSize: 12, background: "#f0fdf4", color: "#16a34a", padding: "2px 8px", borderRadius: 20, fontWeight: 600 }}>{nbTraites} traité{nbTraites > 1 ? "s" : ""}</span>}
         </div>
         <span style={{ fontSize: 18, color: "#c8a84b", fontWeight: 700, transform: open ? "rotate(90deg)" : "none", transition: "transform 0.2s", display: "inline-block" }}>›</span>
       </div>
-      {open && <div style={{ padding: "12px 14px" }}>{produits.map((a: any) => <ProduitRow key={a.id} arrivage={a} onValidate={onValidate} onDelete={onDelete} onOuvreRapport={onOuvreRapport} selectMode={selectMode} selected={selectedArrivages?.has(a.id)} onToggleSelect={onToggleSelect} />)}</div>}
+      {open && (
+        <div style={{ padding: "12px 14px" }}>
+          {produits.map((a: any) => <ProduitRow key={a.id} arrivage={a} onValidate={onValidate} onDelete={onDelete} onOuvreRapport={onOuvreRapport} selectMode={selectMode} selected={selectedArrivages?.has(a.id)} onToggleSelect={onToggleSelect} />)}
+          {nbTraites > 0 && (
+            <div style={{ marginTop: produits.length > 0 ? 10 : 0, borderTop: produits.length > 0 ? "1px solid #e8e0d0" : "none", paddingTop: produits.length > 0 ? 10 : 0 }}>
+              <p style={{ margin: "0 0 8px", fontSize: 11, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.8px" }}>📁 Traités · {nbTraites}</p>
+              {traites.map((a: any) => <ArrivageTraiteRow key={a.id} arrivage={a} onDelete={onDelete} onOuvreRapport={onOuvreRapport} />)}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -1107,6 +1119,11 @@ function DateBlock({ date, arrivages, arrivagesArchives, onValidate, onDelete, o
   const nbFourn = Object.keys(allFournisseurs).length;
   const byFournisseur: Record<string, any[]> = {};
   arrivages.forEach((a: any) => { if (!byFournisseur[a.fournisseur]) byFournisseur[a.fournisseur] = []; byFournisseur[a.fournisseur].push(a); });
+  // Grouper les traités par fournisseur aussi
+  const byFournisseurTraites: Record<string, any[]> = {};
+  (arrivagesArchives || []).forEach((a: any) => { if (!byFournisseurTraites[a.fournisseur]) byFournisseurTraites[a.fournisseur] = []; byFournisseurTraites[a.fournisseur].push(a); });
+  // Tous les fournisseurs (en attente + traités)
+  const allFourn = [...new Set([...Object.keys(byFournisseur), ...Object.keys(byFournisseurTraites)])];
 
   const handleValiderTout = async () => {
     const enAttente = arrivages.filter((a: any) => a.statut === "en attente");
@@ -1166,17 +1183,14 @@ function DateBlock({ date, arrivages, arrivagesArchives, onValidate, onDelete, o
               </label>
             </div>
           </div>
-          {/* Fournisseurs en attente */}
-          {Object.entries(byFournisseur).map(([f, p]) => <FournisseurBlock key={f} fournisseur={f} produits={p} onValidate={onValidate} onDelete={onDelete} onOuvreRapport={onOuvreRapport} selectMode={selectMode} selectedArrivages={selectedArrivages} onToggleSelect={onToggleSelect} />)}
-          {/* Archivés du jour */}
-          {arrivagesArchives?.length > 0 && (
-            <div style={{ marginTop: 10, borderTop: "1px solid rgba(255,255,255,0.1)", paddingTop: 10 }}>
-              <p style={{ fontWeight: 700, fontSize: 11, color: "rgba(255,255,255,0.4)", margin: "0 0 8px", textTransform: "uppercase", letterSpacing: "0.8px" }}>📁 Traités · {arrivagesArchives.length}</p>
-              {arrivagesArchives.map((a: any) => (
-                <ArrivageTraiteRow key={a.id} arrivage={a} onDelete={onDelete} onOuvreRapport={onOuvreRapport} />
-              ))}
-            </div>
-          )}
+          {/* Fournisseurs — en attente + traités regroupés */}
+          {allFourn.map(f => (
+            <FournisseurBlock key={f} fournisseur={f}
+              produits={byFournisseur[f] || []}
+              traites={byFournisseurTraites[f] || []}
+              onValidate={onValidate} onDelete={onDelete} onOuvreRapport={onOuvreRapport}
+              selectMode={selectMode} selectedArrivages={selectedArrivages} onToggleSelect={onToggleSelect} />
+          ))}
         </div>
       )}
     </div>
@@ -4251,6 +4265,19 @@ _PDF joint_`;
     }
   };
 
+  // ─── FAB SCANNER GLOBAL ─── (avant tous les return de page)
+  const fabScanner = !showScanner && !showPalette && (
+    <button
+      onClick={() => { setShowScanner(true); setShowAccueil(false); }}
+      style={{ position: "fixed", bottom: 24, right: 24, width: 58, height: 58, borderRadius: "50%", background: "#0a0a0a", border: "2.5px solid #c8a84b", cursor: "pointer", fontSize: 24, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 20px rgba(0,0,0,0.3)", zIndex: 9999, transition: "transform 0.15s" }}
+      onMouseEnter={e => (e.currentTarget.style.transform = "scale(1.1)")}
+      onMouseLeave={e => (e.currentTarget.style.transform = "scale(1)")}
+      title="Scanner une palette"
+    >
+      📷
+    </button>
+  );
+
   // ─── RENDER ───
 
   // Écran de chargement
@@ -4320,6 +4347,7 @@ _PDF joint_`;
     ];
 
     return (
+      <>{fabScanner}
       <div style={{ minHeight: "100vh", background: bg, fontFamily: "'Syne', sans-serif", transition: "background 0.3s" }}>
         <style>{styles}</style>
 
@@ -4398,6 +4426,7 @@ _PDF joint_`;
           </div>
         </div>
       </div>
+      </>
     );
   }
 
@@ -4406,6 +4435,7 @@ _PDF joint_`;
     const nbRefusASigner = arrivages.filter(a => (a.statut === "refusé" || a.litige?.type === "refusé") && !a.recupere && !a.destruction?.effectuee).length;
     const nbRapportsLitiges = rapports.filter(r => !r.archivé && (r.decision === "refus" || r.decision === "reserve")).length;
     return (
+      <>{fabScanner}
       <div style={{ minHeight: "100vh", background: "#f5f3ee", fontFamily: "'Syne', sans-serif" }}>
         <style>{styles}</style>
         <div style={{ background: "#0a0a0a", borderBottom: "3px solid #dc2626", position: "sticky", top: 0, zIndex: 100 }}>
@@ -4470,6 +4500,7 @@ _PDF joint_`;
           </div>
         </div>
       </div>
+      </>
     );
   }
 
@@ -4484,6 +4515,7 @@ _PDF joint_`;
       : [];
 
     return (
+      <>{fabScanner}
       <div style={{ minHeight: "100vh", background: "#f5f3ee", fontFamily: "'Syne', sans-serif" }}>
         <style>{styles}</style>
 
@@ -4635,13 +4667,14 @@ _PDF joint_`;
           )}
         </div>
       </div>
+      </>
     );
   }
 
   // ─── PAGE STOCK INVENTAIRE (EMBARQUÉE) ───
   if (showStock) {
     return (
-      <StockApp onExit={() => { setShowStock(false); setShowAccueil(true); }} />
+      <>{fabScanner}<StockApp onExit={() => { setShowStock(false); setShowAccueil(true); }} /></>
     );
   }
 
@@ -4652,19 +4685,6 @@ _PDF joint_`;
       {/* POPUP ETIQUETTE MULTI-PALETTES */}
       {popupEtiquette && (
         <PopupEtiquetteMulti arrivage={popupEtiquette} onClose={() => setPopupEtiquette(null)} />
-      )}
-
-      {/* SCANNER FAB — visible sur toutes les pages */}
-      {!showScanner && !showPalette && (
-        <button
-          onClick={() => { setShowScanner(true); setShowAccueil(false); }}
-          style={{ position: "fixed", bottom: 24, right: 24, width: 58, height: 58, borderRadius: "50%", background: "#0a0a0a", border: "2.5px solid #c8a84b", cursor: "pointer", fontSize: 24, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 20px rgba(0,0,0,0.3)", zIndex: 900, transition: "transform 0.15s" }}
-          onMouseEnter={e => (e.currentTarget.style.transform = "scale(1.1)")}
-          onMouseLeave={e => (e.currentTarget.style.transform = "scale(1)")}
-          title="Scanner une palette"
-        >
-          📷
-        </button>
       )}
 
       {toast && (
