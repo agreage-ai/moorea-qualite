@@ -2711,17 +2711,67 @@ function YukonApp({ onClose }: { onClose: () => void }) {
     return () => unsub();
   }, []);
 
-  // Charger le dernier stock manuel
+  // Fallback : charger le dernier stock manuel si Firestore indispo
   useEffect(() => {
     const unsub = onValue(ref(db, "yukon/stocks_manuels"), (snap: any) => {
       if (snap.exists()) {
         const all = Object.values(snap.val()) as any[];
         all.sort((a: any, b: any) => (b.date || "").localeCompare(a.date || ""));
-        if (all.length > 0) { setStocks((all[0] as any).stocks || {}); setStockDate((all[0] as any).date || ""); }
+        if (all.length > 0) {
+          setStocks((all[0] as any).stocks || {});
+          setStockDate((all[0] as any).date || "");
+        }
       }
       setLoading(false);
     });
     return () => unsub();
+  }, []);
+  useEffect(() => {
+    const loadFromMooreaStock = async () => {
+      try {
+        const { getFirestore, collection, getDocs, query, orderBy, limit } = await import("firebase/firestore");
+        const { initializeApp, getApps } = await import("firebase/app");
+        const stockCfg = {
+          apiKey: "AIzaSyDETa9aJzOdVAMpDLMv8inFKZ921yiCzY8",
+          authDomain: "moorea-stock.firebaseapp.com",
+          projectId: "moorea-stock",
+          storageBucket: "moorea-stock.firebasestorage.app",
+          messagingSenderId: "254920745129",
+          appId: "1:254920745129:web:fa14e2d3b53a8e6b9c9f5a"
+        };
+        const existing = getApps().find((a: any) => a.name === "moorea-stock");
+        const stockApp = existing ?? initializeApp(stockCfg, "moorea-stock");
+        const db2 = getFirestore(stockApp);
+        // Cherche la dernière session de comptage clôturée
+        const sessionsRef = collection(db2, "comptages");
+        const snap = await getDocs(query(sessionsRef, orderBy("createdAt", "desc"), limit(10)));
+        if (snap.empty) return;
+        // Prend la session la plus récente avec des données
+        for (const docSnap of snap.docs) {
+          const session = docSnap.data();
+          if (!session.articles || session.articles.length === 0) continue;
+          // Construit le mapping nom → quantité comptée
+          const newStocks: Record<string, number> = {};
+          for (const art of session.articles) {
+            const nom = art.article?.toUpperCase().trim() || "";
+            const compte = art.compte ?? art.nb_colis ?? 0;
+            if (nom) newStocks[nom] = compte;
+          }
+          if (Object.keys(newStocks).length > 0) {
+            setStocks(newStocks);
+            const date = session.date || new Date(session.createdAt?.seconds * 1000).toLocaleDateString("fr-FR");
+            setStockDate(date);
+            // Sauvegarde dans Yukon pour usage offline
+            const entryId = date.replace(/\//g, "-");
+            await update(ref(db, `yukon/stocks_manuels/${entryId}`), { date, stocks: newStocks });
+          }
+          return;
+        }
+      } catch (e) {
+        console.log("Impossible de charger moorea-stock:", e);
+      }
+    };
+    loadFromMooreaStock();
   }, []);
 
   const saveVentes = async (newVentes: Record<string, number>) => {
@@ -2804,15 +2854,48 @@ function YukonApp({ onClose }: { onClose: () => void }) {
               ))}
             </div>
 
-            {/* Stock info + saisie inline */}
+            {/* Stock info */}
             <div style={{ background: "#fff", borderRadius: 12, padding: "12px 14px", marginBottom: 14, border: "1px solid #e8e0d0" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <div>
                   <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: "#1a2e1a" }}>📦 Stock utilisé</p>
-                  <p style={{ margin: "2px 0 0", fontSize: 12, color: "#9ca3af" }}>{stockDate ? `Inventaire du ${stockDate}` : "Aucun stock saisi — modifiez directement dans le tableau"}</p>
+                  <p style={{ margin: "2px 0 0", fontSize: 12, color: "#9ca3af" }}>{stockDate ? `Inventaire du ${stockDate}` : "Aucun stock — saisissez ou synchronisez"}</p>
                 </div>
-                {stockDate && <span style={{ fontSize: 11, background: "#f0fdf4", color: "#16a34a", padding: "3px 8px", borderRadius: 8, fontWeight: 600 }}>✓ {stockDate}</span>}
+                <button onClick={async () => {
+                  try {
+                    const { getFirestore, collection, getDocs, query, orderBy, limit } = await import("firebase/firestore");
+                    const { initializeApp, getApps } = await import("firebase/app");
+                    const stockCfg = { apiKey: "AIzaSyDETa9aJzOdVAMpDLMv8inFKZ921yiCzY8", authDomain: "moorea-stock.firebaseapp.com", projectId: "moorea-stock", storageBucket: "moorea-stock.firebasestorage.app", messagingSenderId: "254920745129", appId: "1:254920745129:web:fa14e2d3b53a8e6b9c9f5a" };
+                    const existing = getApps().find((a: any) => a.name === "moorea-stock");
+                    const stockApp = existing ?? initializeApp(stockCfg, "moorea-stock");
+                    const db2 = getFirestore(stockApp);
+                    const snap = await getDocs(query(collection(db2, "comptages"), orderBy("createdAt", "desc"), limit(10)));
+                    for (const docSnap of snap.docs) {
+                      const session = docSnap.data();
+                      if (!session.articles?.length) continue;
+                      const newStocks: Record<string, number> = {};
+                      for (const art of session.articles) {
+                        const nom = art.article?.toUpperCase().trim() || "";
+                        const compte = art.compte ?? art.nb_colis ?? 0;
+                        if (nom) newStocks[nom] = compte;
+                      }
+                      if (Object.keys(newStocks).length > 0) {
+                        setStocks(newStocks);
+                        const date = session.date || new Date((session.createdAt?.seconds || 0) * 1000).toLocaleDateString("fr-FR");
+                        setStockDate(date);
+                        const entryId = date.replace(/\//g, "-");
+                        await update(ref(db, `yukon/stocks_manuels/${entryId}`), { date, stocks: newStocks });
+                        alert(`✅ Stock synchronisé depuis moorea-stock (${date})`);
+                        return;
+                      }
+                    }
+                    alert("Aucune session de comptage trouvée dans moorea-stock");
+                  } catch (e) { alert("Erreur de connexion à moorea-stock"); }
+                }} style={{ padding: "7px 12px", borderRadius: 9, border: "1.5px solid #16a34a", background: "#f0fdf4", cursor: "pointer", fontSize: 12, fontWeight: 700, color: "#16a34a" }}>
+                  🔄 Sync moorea-stock
+                </button>
               </div>
+              {stockDate && <p style={{ margin: "6px 0 0", fontSize: 11, color: "#16a34a", fontWeight: 600 }}>✓ {stockDate}</p>}
             </div>
 
             {/* Tableau ventes + stock + calcul */}
