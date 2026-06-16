@@ -88,6 +88,13 @@ const styles = `
   .toast { animation: slideIn 0.25s ease; }
   @keyframes fadeUp { from { opacity:0; transform: translateY(12px); } to { opacity:1; transform: translateY(0); } }
   .fade-up { animation: fadeUp 0.3s ease both; }
+
+  /* ── DARK MODE ── */
+  .dark { --bg: #0f1117; --bg2: #1a1d27; --bg3: #22263a; --border: #2d3148; --text: #e8e6f0; --text2: #9b97b2; --gold: #c8a84b; }
+  .dark body, .dark .app { background: var(--bg) !important; color: var(--text) !important; }
+  .dark .card { background: var(--bg2) !important; border-color: var(--border) !important; }
+  .dark input, .dark select, .dark textarea { background: var(--bg3) !important; color: var(--text) !important; border-color: var(--border) !important; }
+  .dark input::placeholder { color: var(--text2) !important; }
 `;
 
 function NoteSelector({ value, onChange }: { value: number; onChange: (n: number) => void }) {
@@ -384,34 +391,30 @@ function FournisseurBlock({ fournisseur, produits, onValidate, onDelete, onOuvre
 }
 
 // ─── QR CODE ÉTIQUETTE PALETTE ───
-async function imprimerEtiquettePalette(arrivage: any) {
+async function imprimerEtiquettePalette(arrivage: any, paletteIndex?: number, colisCount?: number) {
   const lot = arrivage.lot_interne || arrivage.id;
+  const palRef = paletteIndex != null ? `${paletteIndex}` : null;
   const url = `${window.location.origin}${window.location.pathname}?id=${arrivage.id}`;
+  const lotLabel = palRef ? `MRA.${String(lot).padStart(4,"0")}-${palRef}` : `MRA.${String(lot).padStart(4,"0")}`;
+  const qte = colisCount != null ? colisCount : arrivage.quantite;
 
-  // Ouvrir la fenêtre synchrone avant tout await
   const w = window.open("", "_blank");
   if (!w) { alert("Autorise les popups pour imprimer l'étiquette"); return; }
   w.document.write(`<html><body style="background:#FFE600;display:flex;align-items:center;justify-content:center;height:100vh;font-family:Arial;font-size:20px;font-weight:900">⏳ Génération...</body></html>`);
 
-  // Générer QR en SVG via l'API publique qrserver.com
   const qrSvgUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(url)}&bgcolor=FFE600&color=000000&margin=4`;
-
-  // Convertir en base64 via canvas dans la fenêtre principale
   let qrDataUrl = "";
   try {
     qrDataUrl = await new Promise<string>((resolve) => {
-      const img = new Image();
-      img.crossOrigin = "anonymous";
+      const img = new Image(); img.crossOrigin = "anonymous";
       img.onload = () => {
         const canvas = document.createElement("canvas");
         canvas.width = 200; canvas.height = 200;
-        const ctx = canvas.getContext("2d")!;
-        ctx.drawImage(img, 0, 0, 200, 200);
+        canvas.getContext("2d")!.drawImage(img, 0, 0, 200, 200);
         resolve(canvas.toDataURL("image/png"));
       };
       img.onerror = () => resolve("");
       img.src = qrSvgUrl;
-      // Timeout 5s
       setTimeout(() => resolve(""), 5000);
     });
   } catch { qrDataUrl = ""; }
@@ -420,29 +423,12 @@ async function imprimerEtiquettePalette(arrivage: any) {
     ? `<img src="${qrDataUrl}" style="width:130px;height:130px;border:3px solid #000" />`
     : `<img src="${qrSvgUrl}" style="width:130px;height:130px;border:3px solid #000" onerror="this.style.display='none'" />`;
 
-  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Palette #${lot}</title>
-<style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:Arial Black,Arial,sans-serif;background:#fff;display:flex;justify-content:center;padding:20px}
-.etiquette{width:200mm;min-height:140mm;background:#FFE600;border:4px solid #000;padding:8mm;display:flex;flex-direction:column;gap:5mm}
-.lot{font-size:52px;font-weight:900;color:#000;letter-spacing:2px;border-bottom:3px solid #000;padding-bottom:4mm}
-.produit{font-size:28px;font-weight:900;color:#000;line-height:1.2}
-.fourn{font-size:22px;font-weight:700;color:#000}
-.infos{display:grid;grid-template-columns:1fr 1fr;gap:3mm}
-.info-cell{background:rgba(0,0,0,0.08);border-radius:3px;padding:3mm 4mm}
-.info-lbl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#333}
-.info-val{font-size:20px;font-weight:900;color:#000}
-.bottom{display:flex;justify-content:space-between;align-items:flex-end;margin-top:auto}
-.qty{font-size:80px;font-weight:900;color:#000;line-height:1}
-.unite{font-size:24px;font-weight:700;color:#000;margin-top:2mm}
-.qr-block{text-align:right}
-.qr-block p{font-size:11px;font-weight:700;color:#000;margin-top:2mm;text-align:center}
-.btn-print{position:fixed;top:10px;right:10px;padding:9px 18px;background:#000;color:#FFE600;border:none;border-radius:8px;font-weight:900;cursor:pointer;font-size:14px}
-@media print{.btn-print{display:none}body{padding:0}}
-</style></head><body>
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${lotLabel}</title>
+<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial Black,Arial,sans-serif;background:#fff;display:flex;justify-content:center;padding:20px}.etiquette{width:200mm;min-height:140mm;background:#FFE600;border:4px solid #000;padding:8mm;display:flex;flex-direction:column;gap:5mm}.lot{font-size:52px;font-weight:900;color:#000;letter-spacing:2px;border-bottom:3px solid #000;padding-bottom:4mm}.produit{font-size:28px;font-weight:900;color:#000;line-height:1.2}.fourn{font-size:22px;font-weight:700;color:#000}.infos{display:grid;grid-template-columns:1fr 1fr;gap:3mm}.info-cell{background:rgba(0,0,0,0.08);border-radius:3px;padding:3mm 4mm}.info-lbl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#333}.info-val{font-size:20px;font-weight:900;color:#000}.bottom{display:flex;justify-content:space-between;align-items:flex-end;margin-top:auto}.qty{font-size:80px;font-weight:900;color:#000;line-height:1}.unite{font-size:24px;font-weight:700;color:#000;margin-top:2mm}.qr-block{text-align:right}.qr-block p{font-size:11px;font-weight:700;color:#000;margin-top:2mm;text-align:center}.btn-print{position:fixed;top:10px;right:10px;padding:9px 18px;background:#000;color:#FFE600;border:none;border-radius:8px;font-weight:900;cursor:pointer;font-size:14px}@media print{.btn-print{display:none}body{padding:0}}</style>
+</head><body>
 <button class="btn-print" onclick="window.print()">IMPRIMER</button>
 <div class="etiquette">
-  <div class="lot">MRA.${String(lot).padStart(4,"0")}</div>
+  <div class="lot">${lotLabel}</div>
   <div class="produit">${(arrivage.produit || "—").toUpperCase()}</div>
   <div class="fourn">${(arrivage.fournisseur || "—").toUpperCase()}</div>
   <div class="infos">
@@ -451,26 +437,104 @@ body{font-family:Arial Black,Arial,sans-serif;background:#fff;display:flex;justi
     <div class="info-cell"><div class="info-lbl">POIDS BRUT</div><div class="info-val">${arrivage.poids_brut || "—"} KG</div></div>
     <div class="info-cell"><div class="info-lbl">POIDS NET</div><div class="info-val">${arrivage.poids_net || "—"} KG</div></div>
     <div class="info-cell"><div class="info-lbl">LOT FOURNISSEUR</div><div class="info-val">${arrivage.lot_fournisseur || "—"}</div></div>
-    <div class="info-cell"><div class="info-lbl">LOT INTERNE</div><div class="info-val">${lot}</div></div>
+    <div class="info-cell"><div class="info-lbl">LOT INTERNE</div><div class="info-val">${lot}${palRef ? `-${palRef}` : ""}</div></div>
   </div>
   <div class="bottom">
-    <div>
-      <div class="qty">${arrivage.quantite || "—"}</div>
-      <div class="unite">${(arrivage.unite || "COLIS").toUpperCase()}</div>
-    </div>
-    <div class="qr-block">
-      ${qrHtml}
-      <p>SCANNER → FICHE PALETTE</p>
-    </div>
+    <div><div class="qty">${qte || "—"}</div><div class="unite">${(arrivage.unite || "COLIS").toUpperCase()}</div></div>
+    <div class="qr-block">${qrHtml}<p>SCANNER → FICHE PALETTE</p></div>
   </div>
 </div>
 </body></html>`;
-
-  w.document.open();
-  w.document.write(html);
-  w.document.close();
+  w.document.open(); w.document.write(html); w.document.close();
 }
-// ─── FORMULAIRE PERTE DEPUIS SCAN ───
+
+function PopupEtiquetteMulti({ arrivage, onClose }: { arrivage: any; onClose: () => void }) {
+  const totalColis = arrivage.quantite || 0;
+  const [nbPalettes, setNbPalettes] = useState(1);
+  const [repartition, setRepartition] = useState<number[]>([totalColis]);
+  const [printing, setPrinting] = useState(false);
+
+  const updateNb = (n: number) => {
+    setNbPalettes(n);
+    const base = Math.floor(totalColis / n);
+    const reste = totalColis % n;
+    setRepartition(Array.from({ length: n }, (_, i) => base + (i === 0 ? reste : 0)));
+  };
+
+  const setQte = (idx: number, val: string) => {
+    const v = Math.max(0, parseInt(val) || 0);
+    setRepartition(prev => prev.map((q, i) => i === idx ? v : q));
+  };
+
+  const totalSaisi = repartition.reduce((a, b) => a + b, 0);
+  const ecart = totalSaisi - totalColis;
+
+  const handleImprimer = async () => {
+    setPrinting(true);
+    for (let i = 0; i < nbPalettes; i++) {
+      await imprimerEtiquettePalette(arrivage, i + 1, repartition[i]);
+      if (i < nbPalettes - 1) await new Promise(r => setTimeout(r, 800));
+    }
+    setPrinting(false);
+    onClose();
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 3000, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div style={{ background: "#fff", borderRadius: 24, padding: 24, width: "100%", maxWidth: 420, boxShadow: "0 24px 60px rgba(0,0,0,0.3)", maxHeight: "90vh", overflowY: "auto" }}>
+        <div style={{ textAlign: "center", marginBottom: 20 }}>
+          <div style={{ fontSize: 36, marginBottom: 8 }}>🏷</div>
+          <p style={{ margin: "0 0 2px", fontWeight: 800, fontSize: 16, color: "#1a2e1a", fontFamily: "'Syne', sans-serif" }}>{arrivage.produit}</p>
+          <p style={{ margin: 0, fontSize: 12, color: "#9ca3af" }}>Lot #{arrivage.lot_interne} · {totalColis} colis au total</p>
+        </div>
+        <div style={{ marginBottom: 16 }}>
+          <p style={{ margin: "0 0 8px", fontWeight: 700, fontSize: 13, color: "#374151" }}>Nombre de palettes</p>
+          <div style={{ display: "flex", gap: 8 }}>
+            {[1,2,3,4,5,6].map(n => (
+              <button key={n} onClick={() => updateNb(n)}
+                style={{ flex: 1, padding: "10px 0", borderRadius: 10, border: `2px solid ${nbPalettes===n?"#c8a84b":"#e8e0d0"}`, background: nbPalettes===n?"#fffbf0":"#fff", cursor: "pointer", fontSize: 15, fontWeight: 800, color: nbPalettes===n?"#8a6f2e":"#9ca3af" }}>
+                {n}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div style={{ marginBottom: 16 }}>
+          <p style={{ margin: "0 0 8px", fontWeight: 700, fontSize: 13, color: "#374151" }}>Colis par palette</p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {repartition.map((q, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, background: "#f9fafb", borderRadius: 10, padding: "10px 14px" }}>
+                <div style={{ width: 36, height: 36, borderRadius: 10, background: "#c8a84b", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 800, color: "#0a0a0a", flexShrink: 0 }}>P{i+1}</div>
+                <div style={{ flex: 1 }}>
+                  <p style={{ margin: "0 0 2px", fontSize: 11, color: "#9ca3af" }}>MRA.{String(arrivage.lot_interne||"").padStart(4,"0")}-{i+1}</p>
+                  <input type="number" min="0" value={q} onChange={e => setQte(i, e.target.value)}
+                    style={{ width: "100%", padding: "6px 10px", border: "1.5px solid #e8e0d0", borderRadius: 8, fontSize: 16, fontWeight: 700, outline: "none", boxSizing: "border-box" as const }} />
+                </div>
+                <p style={{ margin: 0, fontSize: 11, color: "#9ca3af", flexShrink: 0 }}>colis</p>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div style={{ background: ecart!==0?"#fef2f2":"#f0fdf4", borderRadius: 10, padding: "10px 14px", marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: ecart!==0?"#dc2626":"#16a34a" }}>
+            {ecart===0?"✓ Total correct":ecart>0?`▲ +${ecart} en trop`:`▼ ${Math.abs(ecart)} manquants`}
+          </p>
+          <p style={{ margin: 0, fontSize: 13, color: "#6b7280" }}>{totalSaisi} / {totalColis}</p>
+        </div>
+        <div style={{ display: "flex", gap: 10 }}>
+          <button onClick={handleImprimer} disabled={printing}
+            style={{ flex: 2, padding: "14px", borderRadius: 14, border: "none", background: printing?"#e8e0d0":"#c8a84b", color: "#0a0a0a", cursor: printing?"not-allowed":"pointer", fontSize: 14, fontWeight: 800, fontFamily: "'Syne', sans-serif" }}>
+            {printing?`⏳ Impression...`:`🖨 Imprimer ${nbPalettes} étiquette${nbPalettes>1?"s":""}`}
+          </button>
+          <button onClick={onClose}
+            style={{ flex: 1, padding: "14px", borderRadius: 14, border: "1.5px solid #e8e0d0", background: "#f9fafb", color: "#6b7280", cursor: "pointer", fontSize: 14, fontWeight: 600 }}>
+            Annuler
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PalettePerteForm({ arrivage }: { arrivage: any }) {
   const [perteQty, setPerteQty] = useState("");
   const [perteRaison, setPerteRaison] = useState("");
@@ -2450,38 +2514,58 @@ function StockApp({ onExit }: { onExit: () => void }) {
       };
 
       (window as any).sVerifierLotDansStock = (lot: string) => {
-        const findArt = (list: any[]) => list.find((a: any) => (a.lots || []).includes(lot) || (a.lotsQty && Object.keys(a.lotsQty).includes(lot)));
+        // Gère MRA.4561-2 → extrait lot de base + index palette
+        const paletteMatch = lot.match(/^(.+?)(?:-(\d+))?$/);
+        const baseLot = paletteMatch?.[1] || lot;
+        const paletteIdx = paletteMatch?.[2] ? parseInt(paletteMatch[2]) : null;
+        const findArt = (list: any[]) => list.find((a: any) =>
+          (a.lots || []).includes(baseLot) || (a.lotsQty && Object.keys(a.lotsQty).includes(baseLot))
+        );
         const artSession = findArt(articles);
         const artAll = artSession || findArt(allArticles);
         if (!artAll) { (window as any).sAfficherResultatScan({ found: false, msg: `Lot #${lot} introuvable dans ce stock` }); return; }
         const enSession = !!artSession;
         const art = artSession || artAll;
+        // Si multi-palette : ouvre le prochain emplacement libre
+        if (paletteIdx !== null && enSession) {
+          let nextLoc = 1;
+          for (let i = 1; i <= 8; i++) {
+            if (art[`compte${i}`] === null || art[`compte${i}`] === undefined) { nextLoc = i; break; }
+            nextLoc = i + 1;
+          }
+          if (nextLoc <= 8 && (art[`compte${nextLoc}`] === null || art[`compte${nextLoc}`] === undefined)) {
+            setTimeout(() => (window as any).sAddLoc(art.id, nextLoc), 300);
+          }
+        }
         const compte = enSession && art.compte !== null && art.compte !== undefined ? art.compte : null;
         const stock = art.nb_colis;
         const ecart = compte !== null ? compte - stock : null;
         const ec = ecart === null ? "#6b7280" : ecart < 0 ? "#dc2626" : ecart > 0 ? "#d97706" : "#16a34a";
         const html = `
-          <div style="font-size:32px;margin-bottom:8px">${enSession ? (compte !== null ? "✅" : "⏳") : "📦"}</div>
-          <p style="font-size:18px;font-weight:800;color:#1a2e1a;margin:0 0 4px">${art.article}</p>
-          <p style="font-size:13px;color:#6b7280;margin:0 0 16px">Lot #${lot} · ${art.famille || ""}</p>
+          <div style="font-size:32px;margin-bottom:8px">${enSession?(compte!==null?"✅":"⏳"):"📦"}</div>
+          <p style="font-size:18px;font-weight:800;color:#1a2e1a;margin:0 0 2px">${art.article}</p>
+          ${paletteIdx?`<p style="font-size:12px;font-weight:700;color:#c8a84b;margin:0 0 10px">🏷 Palette #${paletteIdx}</p>`:`<p style="font-size:13px;color:#6b7280;margin:0 0 12px">Lot #${baseLot}</p>`}
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
             <div style="background:#f9fafb;border-radius:10px;padding:10px">
               <p style="margin:0 0 2px;font-size:10px;color:#9ca3af;text-transform:uppercase">Stock sys.</p>
               <p style="margin:0;font-size:20px;font-weight:800;color:#374151">${stock}</p>
             </div>
-            <div style="background:${compte !== null ? ec + "18" : "#f9fafb"};border-radius:10px;padding:10px;border:${compte !== null ? `1.5px solid ${ec}` : "none"}">
+            <div style="background:${compte!==null?ec+"18":"#f9fafb"};border-radius:10px;padding:10px;border:${compte!==null?`1.5px solid ${ec}`:"none"}">
               <p style="margin:0 0 2px;font-size:10px;color:#9ca3af;text-transform:uppercase">Compté</p>
-              <p style="margin:0;font-size:20px;font-weight:800;color:${ec}">${compte !== null ? compte : "—"}</p>
+              <p style="margin:0;font-size:20px;font-weight:800;color:${ec}">${compte!==null?compte:"—"}</p>
             </div>
           </div>
-          ${ecart !== null ? `<div style="background:${ec}18;border-radius:10px;padding:10px;border:1.5px solid ${ec};margin-bottom:12px">
-            <p style="margin:0;font-size:14px;font-weight:700;color:${ec}">Écart : ${ecart > 0 ? "+" : ""}${ecart} ${ecart === 0 ? "— OK ✓" : ecart < 0 ? "manquant" + (Math.abs(ecart) > 1 ? "s" : "") : "surplus"}</p>
-          </div>` : ""}
-          ${!enSession ? `<div style="background:#fffbeb;border-radius:10px;padding:10px;border:1px solid #fde68a">
-            <p style="margin:0;font-size:12px;color:#d97706;font-weight:600">⚠️ Article ${getEquipe(artAll)} — pas dans la session ${currentTeam || "en cours"}</p>
-          </div>` : compte === null ? `<div style="background:#eff6ff;border-radius:10px;padding:10px;border:1px solid #bfdbfe">
+          ${ecart!==null?`<div style="background:${ec}18;border-radius:10px;padding:10px;border:1.5px solid ${ec};margin-bottom:12px">
+            <p style="margin:0;font-size:14px;font-weight:700;color:${ec}">Écart : ${ecart>0?"+":""}${ecart} ${ecart===0?"— OK ✓":ecart<0?"manquant"+(Math.abs(ecart)>1?"s":""):"surplus"}</p>
+          </div>`:""}
+          ${paletteIdx&&enSession?`<div style="background:#f0fdf4;border-radius:10px;padding:10px;border:1px solid #bbf7d0">
+            <p style="margin:0;font-size:12px;color:#15803d;font-weight:700">✓ Emplacement P${paletteIdx} ajouté — saisissez les colis</p>
+          </div>`:""}
+          ${!enSession?`<div style="background:#fffbeb;border-radius:10px;padding:10px;border:1px solid #fde68a">
+            <p style="margin:0;font-size:12px;color:#d97706;font-weight:600">⚠️ Article ${getEquipe(artAll)} — pas dans la session ${currentTeam||"en cours"}</p>
+          </div>`:compte===null?`<div style="background:#eff6ff;border-radius:10px;padding:10px;border:1px solid #bfdbfe">
             <p style="margin:0;font-size:12px;color:#1d4ed8;font-weight:600">📋 Dans la liste mais pas encore compté</p>
-          </div>` : ""}`;
+          </div>`:""}`;
         (window as any).sAfficherResultatScan({ found: true, html });
       };
 
@@ -2588,6 +2672,7 @@ export default function App() {
   const [showAccueil, setShowAccueil] = useState(true);
   const [showLitiges, setShowLitiges] = useState(false);
   const [showRecherche, setShowRecherche] = useState(false);
+  const [darkMode, setDarkMode] = useState(() => localStorage.getItem("moorea-dark") === "1");
   const [popupEtiquette, setPopupEtiquette] = useState<any>(null);
   const [showStock, setShowStock] = useState(false);
   const [showPalette, setShowPalette] = useState<string | null>(null);
@@ -2668,6 +2753,27 @@ export default function App() {
     });
     return () => unsub();
   }, []);
+
+  // ─── DARK MODE ───
+  useEffect(() => {
+    document.documentElement.classList.toggle("dark", darkMode);
+    localStorage.setItem("moorea-dark", darkMode ? "1" : "0");
+  }, [darkMode]);
+
+  // ─── NOTIFICATIONS LITIGES ───
+  const [notifLitiges, setNotifLitiges] = useState<any[]>([]);
+  useEffect(() => {
+    if (!arrivages.length) return;
+    const seuilJours = 3;
+    const now = Date.now();
+    const alertes = arrivages.filter((a: any) => {
+      if (!a.litige || a.litige.statut === "clôturé") return false;
+      const ouvertLe = a.litige.createdAt || 0;
+      const jours = (now - ouvertLe) / (1000 * 60 * 60 * 24);
+      return jours >= seuilJours;
+    });
+    setNotifLitiges(alertes);
+  }, [arrivages]);
 
   // ─── LOAD STOCK OVERRIDES ───
   useEffect(() => {
@@ -4151,12 +4257,24 @@ _PDF joint_`;
   if (showAccueil) {
     const getHello = () => {
       const h = new Date().getHours();
+      if (h < 5) return "Bonne nuit";
       if (h < 12) return "Bonjour";
       if (h < 18) return "Bon après-midi";
       return "Bonsoir";
     };
+    const today = new Date().toLocaleDateString("fr-FR");
     const nbAttente = arrivages.filter(a => a.statut === "en attente").length;
-    const nbRefus = arrivages.filter(a => (a.statut === "refusé" || a.litige?.type === "refusé") && !a.recupere && !a.destruction?.effectuee).length;
+    const nbTraitesAujourdHui = arrivages.filter(a => a.date === today && a.statut !== "en attente").length;
+    const nbLitigesOuverts = arrivages.filter(a => a.litige && a.litige.statut === "ouvert").length;
+    const nbRapports = rapports.length;
+
+    const bg = darkMode ? "#0f1117" : "#f5f3ee";
+    const cardBg = darkMode ? "#1a1d27" : "#fff";
+    const cardBorder = darkMode ? "#2d3148" : "#e8e0d0";
+    const textMain = darkMode ? "#e8e6f0" : "#1a2e1a";
+    const textSub = darkMode ? "#9b97b2" : "#9ca3af";
+    const headerBg = darkMode ? "#080a12" : "linear-gradient(135deg, #1a3a1a 0%, #2d5a1e 40%, #8a6f2e 100%)";
+
     const buttons = [
       { icon: "📋", label: "Pointer arrivage", sub: "Contrôler et valider les arrivages du jour", color: "#c8a84b", badge: nbAttente || null, action: () => { setShowAccueil(false); setPageMode("arrivages"); setVue("__none__" as any); } },
       { icon: "📊", label: "Rapports qualité", sub: "Historique et envoi des rapports d'agrément", color: "#16a34a", badge: null, action: () => { setShowAccueil(false); setVue("historique"); setPageMode("arrivages"); } },
@@ -4165,40 +4283,84 @@ _PDF joint_`;
       { icon: "📷", label: "Scanner une palette", sub: "Scanne le QR code pour accéder à la fiche", color: "#6b7280", badge: null, action: () => { setShowAccueil(false); setShowScanner(true); } },
       { icon: "✦", label: "Nouveau rapport manuel", sub: "Saisir un rapport sans arrivage lié", color: "#8b5cf6", badge: null, action: () => { reset(); setRapportArrivage(null); setShowAccueil(false); setVue("form"); window.scrollTo(0, 0); } },
     ];
+
     return (
-      <div style={{ minHeight: "100vh", background: "#f5f3ee", fontFamily: "'Syne', sans-serif" }}>
+      <div style={{ minHeight: "100vh", background: bg, fontFamily: "'Syne', sans-serif", transition: "background 0.3s" }}>
         <style>{styles}</style>
 
-        {/* BANDEAU */}
-        <div style={{ background: "linear-gradient(135deg, #1a3a1a 0%, #2d5a1e 40%, #8a6f2e 100%)", padding: "40px 24px 56px", textAlign: "center", position: "relative", overflow: "hidden" }}>
+        {/* HEADER */}
+        <div style={{ background: headerBg, padding: "28px 20px 48px", position: "relative", overflow: "hidden" }}>
           <div style={{ position: "absolute", top: -40, right: -40, width: 180, height: 180, borderRadius: "50%", background: "rgba(200,168,75,0.12)", pointerEvents: "none" }} />
           <div style={{ position: "absolute", bottom: -30, left: -30, width: 130, height: 130, borderRadius: "50%", background: "rgba(200,168,75,0.08)", pointerEvents: "none" }} />
-          <div style={{ fontSize: 46, marginBottom: 10 }}>🌿</div>
-          <h1 style={{ margin: 0, fontSize: 27, fontWeight: 800, color: "#fff", letterSpacing: "-0.5px" }}>
-            {getHello()}, {user?.displayName?.split(" ")[0] || "!"} 👋
-          </h1>
-          <p style={{ margin: "8px 0 0", fontSize: 14, color: "rgba(255,255,255,0.65)" }}>Que voulez-vous faire aujourd'hui ?</p>
-          <button onClick={() => signOut(auth)} style={{ position: "absolute", top: 16, right: 16, padding: "6px 12px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.2)", background: "rgba(255,255,255,0.08)", cursor: "pointer", fontSize: 11, color: "rgba(255,255,255,0.5)", fontFamily: "'Syne', sans-serif" }}>
-            {user?.displayName?.split(" ")[0]} · Déco
-          </button>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+            <div>
+              <p style={{ margin: 0, fontSize: 13, color: "rgba(255,255,255,0.5)", letterSpacing: 1 }}>{today}</p>
+              <h1 style={{ margin: "4px 0 0", fontSize: 24, fontWeight: 800, color: "#fff" }}>
+                {getHello()}, {user?.displayName?.split(" ")[0] || "!"} 👋
+              </h1>
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => setDarkMode(!darkMode)}
+                style={{ width: 38, height: 38, borderRadius: 10, border: "1px solid rgba(255,255,255,0.2)", background: "rgba(255,255,255,0.1)", cursor: "pointer", fontSize: 18, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                {darkMode ? "☀️" : "🌙"}
+              </button>
+              <button onClick={() => signOut(auth)} style={{ padding: "6px 12px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.2)", background: "rgba(255,255,255,0.08)", cursor: "pointer", fontSize: 11, color: "rgba(255,255,255,0.5)", fontFamily: "'Syne', sans-serif" }}>
+                Déco
+              </button>
+            </div>
+          </div>
+
+          {/* STATS RAPIDES */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginTop: 20 }}>
+            {[
+              { label: "En attente", value: nbAttente, color: "#fbbf24" },
+              { label: "Traités today", value: nbTraitesAujourdHui, color: "#34d399" },
+              { label: "Litiges ouverts", value: nbLitigesOuverts, color: "#f87171" },
+              { label: "Rapports", value: nbRapports, color: "#c8a84b" },
+            ].map(s => (
+              <div key={s.label} style={{ background: "rgba(255,255,255,0.1)", borderRadius: 12, padding: "10px 8px", textAlign: "center", backdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.15)" }}>
+                <p style={{ margin: 0, fontSize: 22, fontWeight: 800, color: s.color }}>{s.value}</p>
+                <p style={{ margin: 0, fontSize: 9, color: "rgba(255,255,255,0.6)", textTransform: "uppercase", letterSpacing: "0.3px" }}>{s.label}</p>
+              </div>
+            ))}
+          </div>
         </div>
+
+        {/* BANNIÈRE NOTIFICATIONS */}
+        {notifLitiges.length > 0 && (
+          <div style={{ background: darkMode ? "#2d1a1a" : "#fef2f2", borderBottom: `3px solid #dc2626`, padding: "12px 20px", display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ fontSize: 20 }}>🔔</span>
+            <div style={{ flex: 1 }}>
+              <p style={{ margin: 0, fontWeight: 700, fontSize: 13, color: "#dc2626" }}>
+                {notifLitiges.length} litige{notifLitiges.length > 1 ? "s" : ""} ouvert{notifLitiges.length > 1 ? "s" : ""} depuis plus de 3 jours
+              </p>
+              <p style={{ margin: 0, fontSize: 11, color: darkMode ? "#f87171" : "#9ca3af" }}>
+                {notifLitiges.slice(0, 2).map(a => a.produit).join(", ")}{notifLitiges.length > 2 ? ` +${notifLitiges.length - 2}` : ""}
+              </p>
+            </div>
+            <button onClick={() => { setShowAccueil(false); setVue("historique"); setPageMode("arrivages"); setFilterDecision("refus"); }}
+              style={{ padding: "6px 12px", borderRadius: 8, border: "none", background: "#dc2626", color: "#fff", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>
+              Voir
+            </button>
+          </div>
+        )}
 
         {/* BOUTONS */}
         <div style={{ maxWidth: 520, margin: "-24px auto 0", padding: "0 20px 60px", position: "relative" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {buttons.map((b, idx) => (
               <button key={idx} onClick={b.action}
-                style={{ display: "flex", alignItems: "center", gap: 16, padding: "16px 18px", borderRadius: 16, cursor: "pointer", border: `1.5px solid #e8e0d0`, background: "#fff", textAlign: "left", width: "100%", fontFamily: "'Syne', sans-serif", boxShadow: "0 2px 10px rgba(0,0,0,0.06)", transition: "all 0.15s" }}
+                style={{ display: "flex", alignItems: "center", gap: 16, padding: "16px 18px", borderRadius: 16, cursor: "pointer", border: `1.5px solid ${cardBorder}`, background: cardBg, textAlign: "left", width: "100%", fontFamily: "'Syne', sans-serif", boxShadow: darkMode ? "none" : "0 2px 10px rgba(0,0,0,0.06)", transition: "all 0.15s" }}
                 onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = b.color; (e.currentTarget as HTMLElement).style.boxShadow = `0 4px 20px ${b.color}22`; (e.currentTarget as HTMLElement).style.transform = "translateY(-1px)"; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = "#e8e0d0"; (e.currentTarget as HTMLElement).style.boxShadow = "0 2px 10px rgba(0,0,0,0.06)"; (e.currentTarget as HTMLElement).style.transform = "none"; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = cardBorder; (e.currentTarget as HTMLElement).style.boxShadow = darkMode ? "none" : "0 2px 10px rgba(0,0,0,0.06)"; (e.currentTarget as HTMLElement).style.transform = "none"; }}
               >
                 <span style={{ fontSize: 24, width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center", background: b.color + "18", borderRadius: 12, flexShrink: 0 }}>{b.icon}</span>
                 <div style={{ flex: 1 }}>
-                  <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#1a2e1a" }}>{b.label}</p>
-                  <p style={{ margin: "2px 0 0", fontSize: 12, color: "#9ca3af" }}>{b.sub}</p>
+                  <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color: textMain }}>{b.label}</p>
+                  <p style={{ margin: "2px 0 0", fontSize: 12, color: textSub }}>{b.sub}</p>
                 </div>
                 {b.badge ? <span style={{ background: b.color, color: "#fff", fontSize: 12, fontWeight: 700, padding: "3px 9px", borderRadius: 20, flexShrink: 0 }}>{b.badge}</span> : null}
-                <span style={{ color: "#d1d5db", fontSize: 18, flexShrink: 0 }}>›</span>
+                <span style={{ color: darkMode ? "#4a4a6a" : "#d1d5db", fontSize: 18, flexShrink: 0 }}>›</span>
               </button>
             ))}
           </div>
@@ -4453,26 +4615,9 @@ _PDF joint_`;
     <div className="app">
       <style>{styles}</style>
 
-      {/* POPUP ETIQUETTE PALETTE */}
+      {/* POPUP ETIQUETTE MULTI-PALETTES */}
       {popupEtiquette && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 3000, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-          <div style={{ background: "#fff", borderRadius: 24, padding: 28, width: "100%", maxWidth: 380, boxShadow: "0 24px 60px rgba(0,0,0,0.3)", textAlign: "center" }}>
-            <div style={{ fontSize: 44, marginBottom: 12 }}>✅</div>
-            <p style={{ margin: "0 0 4px", fontWeight: 800, fontSize: 17, color: "#1a2e1a", fontFamily: "'Syne', sans-serif" }}>{popupEtiquette.produit}</p>
-            <p style={{ margin: "0 0 6px", fontSize: 13, color: "#6b7280" }}>Lot #{popupEtiquette.lot_interne} · {popupEtiquette.fournisseur}</p>
-            <p style={{ margin: "0 0 20px", fontSize: 15, fontWeight: 700, color: "#374151" }}>🏷 Imprimer l'étiquette palette ?</p>
-            <div style={{ display: "flex", gap: 10 }}>
-              <button onClick={() => { imprimerEtiquettePalette(popupEtiquette); setPopupEtiquette(null); }}
-                style={{ flex: 1, padding: "14px", borderRadius: 14, border: "none", background: "#c8a84b", color: "#0a0a0a", cursor: "pointer", fontSize: 15, fontWeight: 800, fontFamily: "'Syne', sans-serif" }}>
-                🖨 Oui
-              </button>
-              <button onClick={() => setPopupEtiquette(null)}
-                style={{ flex: 1, padding: "14px", borderRadius: 14, border: "1.5px solid #e8e0d0", background: "#f9fafb", color: "#6b7280", cursor: "pointer", fontSize: 15, fontWeight: 600, fontFamily: "'Syne', sans-serif" }}>
-                Non merci
-              </button>
-            </div>
-          </div>
-        </div>
+        <PopupEtiquetteMulti arrivage={popupEtiquette} onClose={() => setPopupEtiquette(null)} />
       )}
 
       {toast && (
