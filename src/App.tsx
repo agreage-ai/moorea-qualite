@@ -2679,6 +2679,8 @@ function YukonApp({ onClose }: { onClose: () => void }) {
   const [loading, setLoading] = useState(true);
   const [stockDate, setStockDate] = useState("");
   const [sessions, setSessions] = useState<any[]>([]);
+  const [joursVentes, setJoursVentes] = useState(4);
+  const [dernCmd, setDernCmd] = useState<Record<string, number>>({});
 
   const getWeekKey = (offset = 0) => {
     const d = new Date();
@@ -2711,7 +2713,13 @@ function YukonApp({ onClose }: { onClose: () => void }) {
     return () => unsub();
   }, []);
 
-  // Fallback : charger le dernier stock manuel si Firestore indispo
+  // Charger la dernière commande
+  useEffect(() => {
+    const unsub = onValue(ref(db, "yukon/dernieres_commandes"), (snap: any) => {
+      if (snap.exists()) setDernCmd(snap.val());
+    });
+    return () => unsub();
+  }, []);
   useEffect(() => {
     const unsub = onValue(ref(db, "yukon/stocks_manuels"), (snap: any) => {
       if (snap.exists()) {
@@ -2856,109 +2864,153 @@ function YukonApp({ onClose }: { onClose: () => void }) {
         {/* PAGE CALCUL */}
         {page === "calcul" && (
           <div>
-            {/* Type commande */}
-            <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-              {(["mercredi", "vendredi"] as const).map(t => (
-                <button key={t} onClick={() => setTypeCommande(t)}
-                  style={{ flex: 1, padding: "12px", borderRadius: 12, border: `2px solid ${typeCommande === t ? "#16a34a" : "#e8e0d0"}`, background: typeCommande === t ? "#f0fdf4" : "#fff", cursor: "pointer", fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 14, color: typeCommande === t ? "#16a34a" : "#9ca3af" }}>
-                  {t === "mercredi" ? "📦 Commande mercredi" : "📦 Commande vendredi"}
-                  <p style={{ margin: "2px 0 0", fontSize: 11, fontWeight: 400, color: typeCommande === t ? "#16a34a" : "#9ca3af" }}>
-                    {t === "mercredi" ? "Départ samedi · Arrivée mardi" : "Départ mardi · Arrivée vendredi"}
-                  </p>
-                </button>
-              ))}
-            </div>
-
-            {/* Sélecteur de session stock */}
-            <div style={{ background: "#fff", borderRadius: 12, padding: "12px 14px", marginBottom: 14, border: "1px solid #e8e0d0" }}>
-              <p style={{ margin: "0 0 8px", fontSize: 13, fontWeight: 700, color: "#1a2e1a" }}>📦 Choisir un inventaire</p>
-              {sessions.length > 0 ? (
-                <select onChange={async e => {
-                  const sessionId = e.target.value;
-                  if (!sessionId) return;
-                  const session = sessions.find(s => s.id === sessionId);
-                  if (!session) return;
-                  try {
-                    const { getFirestore, doc: fDoc, getDoc: fGetDoc } = await import("firebase/firestore");
-                    const { initializeApp, getApps } = await import("firebase/app");
-                    const stockCfg = { apiKey: "AIzaSyDETa9aJzOdVAMpDLMv8inFKZ921yiCzY8", authDomain: "moorea-stock.firebaseapp.com", projectId: "moorea-stock", storageBucket: "moorea-stock.firebasestorage.app", messagingSenderId: "639598259840", appId: "1:639598259840:web:ff3c048f9aac1b99f40065" };
-                    const existing = getApps().find((a: any) => a.name === "moorea-stock");
-                    const stockApp = existing ?? initializeApp(stockCfg, "moorea-stock");
-                    const db2 = getFirestore(stockApp);
-                    const newStocks: Record<string, number> = {};
-                    // Charge GMS + PRESTIGE — les docs sont stockés sous sessionId_GMS et sessionId_PRESTIGE
-                    for (const team of ["GMS", "PRESTIGE"]) {
-                      const docSnap = await fGetDoc(fDoc(db2, "comptages", `${sessionId}_${team}`));
-                      if (docSnap.exists()) {
-                        const data = docSnap.data();
-                        // data.data est un objet { "NOM ARTICLE": { c: compte, cd: detruire, ... } }
-                        const dataObj = data.data || {};
-                        Object.entries(dataObj).forEach(([nomArticle, val]: any) => {
-                          const nom = nomArticle.toUpperCase().trim();
-                          const compte = typeof val === "object" ? (val.c ?? 0) : (val ?? 0);
-                          if (nom && compte > 0) newStocks[nom] = (newStocks[nom] || 0) + compte;
-                        });
-                      }
-                    }
-                    setStocks(newStocks);
-                    setStockDate(session.date);
-                    const entryId = session.date.replace(/\//g, "-");
-                    await update(ref(db, `yukon/stocks_manuels/${entryId}`), { date: session.date, stocks: newStocks });
-                  } catch (e) { console.log("Erreur chargement comptages", e); }
-                }}
-                  defaultValue=""
-                  style={{ width: "100%", padding: "10px 12px", border: "1.5px solid #16a34a", borderRadius: 10, fontSize: 13, background: "#fff", cursor: "pointer" }}>
-                  <option value="" disabled>{stockDate ? `✓ Stock du ${stockDate}` : "— Sélectionner un inventaire —"}</option>
-                  {sessions.map(s => (
-                    <option key={s.id} value={s.id}>{s.label}</option>
-                  ))}
-                </select>
-              ) : (
-                <p style={{ margin: 0, fontSize: 12, color: "#9ca3af" }}>Chargement des sessions moorea-stock...</p>
-              )}
-              {stockDate && <p style={{ margin: "6px 0 0", fontSize: 11, color: "#16a34a", fontWeight: 600 }}>✓ Stock du {stockDate} chargé</p>}
-            </div>
-
-            {/* Tableau ventes + stock + calcul */}
-            <div style={{ background: "#fff", borderRadius: 16, overflow: "hidden", border: "1.5px solid #e8e0d0", marginBottom: 16 }}>
-              {/* Header */}
-              <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr", gap: 0, background: "#1a2e1a", padding: "10px 14px" }}>
-                {["Article", "Ventes/sem", "Stock", "Besoin", "Commander"].map(h => (
-                  <p key={h} style={{ margin: 0, fontSize: 10, fontWeight: 700, color: "rgba(255,255,255,0.7)", textTransform: "uppercase", textAlign: h !== "Article" ? "center" : "left" }}>{h}</p>
-                ))}
-              </div>
-              {articles.map((art, idx) => {
-                const { venteJour, stockFinSemaine, besoin, aCommander, stockQty } = calcCommande(art);
-                const hasCommande = aCommander > 0;
-                const stockKey = art.stockNom || art.id;
-                return (
-                  <div key={art.id} style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr", gap: 0, padding: "10px 14px", background: idx % 2 === 0 ? "#fff" : "#fafaf9", borderBottom: "1px solid #f0f0f0", alignItems: "center" }}>
-                    <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: "#1a2e1a" }}>{art.nom}</p>
-                    <div style={{ textAlign: "center" }}>
-                      <input type="number" min="0" value={ventes[art.id] || ""} placeholder="0"
-                        onChange={e => saveVentes({ ...ventes, [art.id]: parseInt(e.target.value) || 0 })}
-                        style={{ width: 60, padding: "4px 6px", border: "1.5px solid #e8e0d0", borderRadius: 8, fontSize: 13, textAlign: "center", outline: "none" }} />
-                    </div>
-                    <div style={{ textAlign: "center" }}>
-                      <input type="number" min="0" value={stocks[stockKey] ?? ""} placeholder="0"
-                        onChange={async e => {
-                          const val = parseInt(e.target.value) || 0;
-                          const newStocks = { ...stocks, [stockKey]: val };
-                          setStocks(newStocks);
-                          const today = new Date().toLocaleDateString("fr-FR");
-                          setStockDate(today);
-                          const entryId = today.replace(/\//g, "-");
-                          await update(ref(db, `yukon/stocks_manuels/${entryId}`), { date: today, stocks: newStocks });
-                        }}
-                        style={{ width: 60, padding: "4px 6px", border: "1.5px solid #16a34a", borderRadius: 8, fontSize: 13, textAlign: "center", outline: "none", background: stockQty > 0 ? "#f0fdf4" : "#fff" }} />
-                    </div>
-                    <p style={{ margin: 0, fontSize: 13, color: "#374151", textAlign: "center" }}>{besoin}</p>
-                    <p style={{ margin: 0, fontSize: 14, fontWeight: 800, color: hasCommande ? "#16a34a" : "#9ca3af", textAlign: "center" }}>
-                      {hasCommande ? aCommander : "—"}
-                    </p>
+            {/* Sélecteur stock + période ventes */}
+            <div style={{ background: "#fff", borderRadius: 12, padding: "12px 14px", marginBottom: 12, border: "1px solid #e8e0d0" }}>
+              <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                <div style={{ flex: 1, minWidth: 200 }}>
+                  <p style={{ margin: "0 0 6px", fontSize: 12, fontWeight: 700, color: "#1a2e1a" }}>📦 Inventaire</p>
+                  {sessions.length > 0 ? (
+                    <select onChange={async e => {
+                      const sessionId = e.target.value;
+                      if (!sessionId) return;
+                      const session = sessions.find(s => s.id === sessionId);
+                      if (!session) return;
+                      try {
+                        const { getFirestore, doc: fDoc, getDoc: fGetDoc } = await import("firebase/firestore");
+                        const { initializeApp, getApps } = await import("firebase/app");
+                        const stockCfg = { apiKey: "AIzaSyDETa9aJzOdVAMpDLMv8inFKZ921yiCzY8", authDomain: "moorea-stock.firebaseapp.com", projectId: "moorea-stock", storageBucket: "moorea-stock.firebasestorage.app", messagingSenderId: "639598259840", appId: "1:639598259840:web:ff3c048f9aac1b99f40065" };
+                        const existing = getApps().find((a: any) => a.name === "moorea-stock");
+                        const stockApp = existing ?? initializeApp(stockCfg, "moorea-stock");
+                        const db2 = getFirestore(stockApp);
+                        const newStocks: Record<string, number> = {};
+                        for (const team of ["GMS", "PRESTIGE"]) {
+                          const docSnap = await fGetDoc(fDoc(db2, "comptages", `${sessionId}_${team}`));
+                          if (docSnap.exists()) {
+                            const data = docSnap.data();
+                            const dataObj = data.data || {};
+                            Object.entries(dataObj).forEach(([nomArticle, val]: any) => {
+                              const nom = nomArticle.toUpperCase().trim();
+                              const compte = typeof val === "object" ? (val.c ?? 0) : (val ?? 0);
+                              if (nom && compte > 0) newStocks[nom] = (newStocks[nom] || 0) + compte;
+                            });
+                          }
+                        }
+                        setStocks(newStocks);
+                        setStockDate(session.date);
+                        const entryId = session.date.replace(/\//g, "-");
+                        await update(ref(db, `yukon/stocks_manuels/${entryId}`), { date: session.date, stocks: newStocks });
+                      } catch (e) { console.log("Erreur chargement comptages", e); }
+                    }}
+                      defaultValue=""
+                      style={{ width: "100%", padding: "8px 10px", border: "1.5px solid #16a34a", borderRadius: 8, fontSize: 12, background: "#fff", cursor: "pointer" }}>
+                      <option value="" disabled>{stockDate ? `✓ ${stockDate}` : "— Choisir —"}</option>
+                      {sessions.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+                    </select>
+                  ) : (
+                    <p style={{ margin: 0, fontSize: 12, color: "#9ca3af" }}>Chargement...</p>
+                  )}
+                </div>
+                <div>
+                  <p style={{ margin: "0 0 6px", fontSize: 12, fontWeight: 700, color: "#1a2e1a" }}>📅 Période ventes</p>
+                  <div style={{ display: "flex", gap: 4 }}>
+                    {[4, 5, 6, 7].map(j => (
+                      <button key={j} onClick={() => setJoursVentes(j)}
+                        style={{ padding: "6px 10px", borderRadius: 8, border: `1.5px solid ${joursVentes === j ? "#16a34a" : "#e8e0d0"}`, background: joursVentes === j ? "#f0fdf4" : "#fff", cursor: "pointer", fontSize: 12, fontWeight: 700, color: joursVentes === j ? "#16a34a" : "#9ca3af" }}>
+                        {j}j
+                      </button>
+                    ))}
                   </div>
-                );
-              })}
+                </div>
+              </div>
+            </div>
+
+            {/* Tableau style Excel commercial */}
+            <div style={{ background: "#fff", borderRadius: 12, overflow: "auto", border: "1.5px solid #e8e0d0", marginBottom: 12 }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 700, fontSize: 12 }}>
+                <thead>
+                  {/* Ligne titre colonnes groupées */}
+                  <tr style={{ background: "#1a2e1a" }}>
+                    <th style={{ padding: "8px 10px", textAlign: "left", color: "rgba(255,255,255,0.7)", fontSize: 10, fontWeight: 700, textTransform: "uppercase", borderRight: "1px solid rgba(255,255,255,0.1)" }}>Article</th>
+                    <th style={{ padding: "8px 8px", textAlign: "center", color: "rgba(255,255,255,0.7)", fontSize: 10, fontWeight: 700, textTransform: "uppercase", borderRight: "1px solid rgba(255,255,255,0.1)" }}>Dern. cmd</th>
+                    <th style={{ padding: "8px 8px", textAlign: "center", color: "#c8a84b", fontSize: 10, fontWeight: 700, textTransform: "uppercase", borderRight: "1px solid rgba(255,255,255,0.1)" }}>Stock</th>
+                    <th style={{ padding: "8px 8px", textAlign: "center", color: "rgba(255,255,255,0.7)", fontSize: 10, fontWeight: 700, textTransform: "uppercase", borderRight: "1px solid rgba(255,255,255,0.1)" }}>Ventes {joursVentes}j</th>
+                    <th style={{ padding: "8px 8px", textAlign: "center", color: "rgba(255,255,255,0.7)", fontSize: 10, fontWeight: 700, textTransform: "uppercase", borderRight: "1px solid rgba(255,255,255,0.1)" }}>Back Stock</th>
+                    <th style={{ padding: "8px 8px", textAlign: "center", color: "rgba(255,255,255,0.7)", fontSize: 10, fontWeight: 700, textTransform: "uppercase", borderRight: "1px solid rgba(255,255,255,0.1)" }}>V. semaine</th>
+                    <th colSpan={2} style={{ padding: "8px 8px", textAlign: "center", color: "#4ade80", fontSize: 10, fontWeight: 700, textTransform: "uppercase" }}>Commandes</th>
+                  </tr>
+                  <tr style={{ background: "#2d4a2d", borderBottom: "2px solid #c8a84b" }}>
+                    <th style={{ padding: "4px 10px", borderRight: "1px solid rgba(255,255,255,0.1)" }} />
+                    <th style={{ padding: "4px 8px", textAlign: "center", color: "rgba(255,255,255,0.5)", fontSize: 9, borderRight: "1px solid rgba(255,255,255,0.1)" }}></th>
+                    <th style={{ padding: "4px 8px", textAlign: "center", color: "#c8a84b", fontSize: 9, borderRight: "1px solid rgba(255,255,255,0.1)" }}>inventaire</th>
+                    <th style={{ padding: "4px 8px", textAlign: "center", color: "rgba(255,255,255,0.5)", fontSize: 9, borderRight: "1px solid rgba(255,255,255,0.1)" }}>saisie</th>
+                    <th style={{ padding: "4px 8px", textAlign: "center", color: "rgba(255,255,255,0.5)", fontSize: 9, borderRight: "1px solid rgba(255,255,255,0.1)" }}>Stock - ventes</th>
+                    <th style={{ padding: "4px 8px", textAlign: "center", color: "rgba(255,255,255,0.5)", fontSize: 9, borderRight: "1px solid rgba(255,255,255,0.1)" }}>estimée</th>
+                    <th style={{ padding: "4px 8px", textAlign: "center", color: "#4ade80", fontSize: 9, borderRight: "1px solid rgba(255,255,255,0.1)", fontWeight: 700 }}>Samedi →Mar</th>
+                    <th style={{ padding: "4px 8px", textAlign: "center", color: "#4ade80", fontSize: 9, fontWeight: 700 }}>Mardi →Ven</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {articles.map((art, idx) => {
+                    const stockKey = art.stockNom || art.id;
+                    const stockQty = stocks[stockKey] ?? 0;
+                    const stockMissing = stockDate && stocks[stockKey] === undefined;
+                    const ventesJours = ventes[art.id] || 0;
+                    const venteJour = joursVentes > 0 ? ventesJours / joursVentes : 0;
+                    const ventesSemaine = Math.round(venteJour * 7);
+                    // Commande mercredi : back stock = stock - ventes jusqu'à samedi (4j)
+                    const backStockSam = Math.max(0, stockQty - venteJour * 4);
+                    const besoinSam = venteJour * 6;
+                    const cmdSam = Math.max(0, Math.ceil(besoinSam - backStockSam));
+                    const cmdSamArrondi = art.colisCommande > 1 ? Math.ceil(cmdSam / art.colisCommande) * art.colisCommande : cmdSam;
+                    // Commande vendredi : back stock = stock - ventes jusqu'à mardi (5j)
+                    const backStockMar = Math.max(0, stockQty - venteJour * 5);
+                    const besoinMar = venteJour * 6;
+                    const cmdMar = Math.max(0, Math.ceil(besoinMar - backStockMar));
+                    const cmdMarArrondi = art.colisCommande > 1 ? Math.ceil(cmdMar / art.colisCommande) * art.colisCommande : cmdMar;
+                    const rowBg = stockMissing ? "#fff5f5" : idx % 2 === 0 ? "#fff" : "#fafaf9";
+                    return (
+                      <tr key={art.id} style={{ background: rowBg, borderLeft: stockMissing ? "3px solid #dc2626" : "3px solid transparent" }}>
+                        <td style={{ padding: "8px 10px", fontWeight: 600, color: stockMissing ? "#dc2626" : "#1a2e1a", borderBottom: "1px solid #f0f0f0", borderRight: "1px solid #f0f0f0", maxWidth: 180 }}>
+                          {art.nom}
+                          {stockMissing && <span style={{ display: "block", fontSize: 9, color: "#dc2626", fontWeight: 700 }}>⚠ Absent du stock</span>}
+                        </td>
+                        <td style={{ padding: "6px 8px", textAlign: "center", color: "#9ca3af", fontSize: 12, borderBottom: "1px solid #f0f0f0", borderRight: "1px solid #f0f0f0" }}>
+                          {dernCmd[art.id] > 0 ? dernCmd[art.id] : "—"}
+                        </td>
+                        <td style={{ padding: "6px 8px", textAlign: "center", borderBottom: "1px solid #f0f0f0", borderRight: "1px solid #f0f0f0" }}>
+                          <input type="number" min="0" value={stocks[stockKey] ?? ""} placeholder="0"
+                            onChange={async e => {
+                              const val = parseInt(e.target.value) || 0;
+                              const newStocks = { ...stocks, [stockKey]: val };
+                              setStocks(newStocks);
+                              const today = new Date().toLocaleDateString("fr-FR");
+                              setStockDate(today);
+                              await update(ref(db, `yukon/stocks_manuels/${today.replace(/\//g, "-")}`), { date: today, stocks: newStocks });
+                            }}
+                            style={{ width: 55, padding: "3px 5px", border: `1.5px solid ${stockMissing ? "#fca5a5" : "#c8a84b"}`, borderRadius: 6, fontSize: 12, textAlign: "center", outline: "none", background: stockMissing ? "#fff5f5" : "#fffbf0", fontWeight: 700 }} />
+                        </td>
+                        <td style={{ padding: "6px 8px", textAlign: "center", borderBottom: "1px solid #f0f0f0", borderRight: "1px solid #f0f0f0" }}>
+                          <input type="number" min="0" value={ventes[art.id] || ""} placeholder="0"
+                            onChange={e => saveVentes({ ...ventes, [art.id]: parseInt(e.target.value) || 0 })}
+                            style={{ width: 55, padding: "3px 5px", border: "1.5px solid #e8e0d0", borderRadius: 6, fontSize: 12, textAlign: "center", outline: "none" }} />
+                        </td>
+                        <td style={{ padding: "6px 8px", textAlign: "center", fontWeight: 700, color: backStockSam > 0 ? "#15803d" : "#9ca3af", borderBottom: "1px solid #f0f0f0", borderRight: "1px solid #f0f0f0", fontSize: 13 }}>
+                          {ventesJours > 0 ? Math.round(backStockSam) : "—"}
+                        </td>
+                        <td style={{ padding: "6px 8px", textAlign: "center", color: "#6b7280", borderBottom: "1px solid #f0f0f0", borderRight: "1px solid #f0f0f0", fontSize: 12 }}>
+                          {ventesJours > 0 ? ventesSemaine : "—"}
+                        </td>
+                        <td style={{ padding: "6px 8px", textAlign: "center", fontWeight: 800, fontSize: 14, color: cmdSamArrondi > 0 ? "#16a34a" : "#9ca3af", borderBottom: "1px solid #f0f0f0", borderRight: "1px solid #f0f0f0", background: cmdSamArrondi > 0 ? "#f0fdf4" : "transparent" }}>
+                          {cmdSamArrondi > 0 ? cmdSamArrondi : "—"}
+                        </td>
+                        <td style={{ padding: "6px 8px", textAlign: "center", fontWeight: 800, fontSize: 14, color: cmdMarArrondi > 0 ? "#16a34a" : "#9ca3af", borderBottom: "1px solid #f0f0f0", background: cmdMarArrondi > 0 ? "#f0fdf4" : "transparent" }}>
+                          {cmdMarArrondi > 0 ? cmdMarArrondi : "—"}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
 
             <button onClick={() => setPage("recap")}
@@ -3058,60 +3110,75 @@ function YukonApp({ onClose }: { onClose: () => void }) {
         {page === "recap" && (
           <div>
             <div style={{ background: "#1a2e1a", borderRadius: 16, padding: "16px 20px", marginBottom: 16 }}>
-              <p style={{ margin: "0 0 4px", fontWeight: 800, fontSize: 18, color: "#c8a84b", fontFamily: "'Syne', sans-serif" }}>
-                📋 Commande Yukon — {typeCommande === "mercredi" ? "Mercredi" : "Vendredi"}
-              </p>
-              <p style={{ margin: 0, fontSize: 12, color: "rgba(255,255,255,0.5)" }}>
-                {new Date().toLocaleDateString("fr-FR")} · {typeCommande === "mercredi" ? "Départ samedi · Arrivée mardi" : "Départ mardi · Arrivée vendredi"}
-              </p>
+              <p style={{ margin: "0 0 4px", fontWeight: 800, fontSize: 18, color: "#c8a84b", fontFamily: "'Syne', sans-serif" }}>📋 Récap Yukon — Semaine {new Date().toLocaleDateString("fr-FR")}</p>
+              <p style={{ margin: 0, fontSize: 12, color: "rgba(255,255,255,0.5)" }}>Ventes sur {joursVentes} jours · Stock du {stockDate || "—"}</p>
             </div>
 
-            {articles.filter(art => calcCommande(art).aCommander > 0).length === 0 ? (
-              <div style={{ textAlign: "center", padding: "3rem", background: "#fff", borderRadius: 16, border: "1.5px solid #e8e0d0" }}>
-                <p style={{ fontSize: 32, marginBottom: 8 }}>✅</p>
-                <p style={{ fontWeight: 700, color: "#16a34a" }}>Aucune commande nécessaire</p>
-              </div>
-            ) : (
-              <>
-                <div style={{ background: "#fff", borderRadius: 16, overflow: "hidden", border: "1.5px solid #e8e0d0", marginBottom: 16 }}>
-                  {articles.filter(art => calcCommande(art).aCommander > 0).map((art, idx) => {
-                    const { aCommander } = calcCommande(art);
+            {/* Tableau récap */}
+            <div style={{ background: "#fff", borderRadius: 14, overflow: "hidden", border: "1.5px solid #e8e0d0", marginBottom: 16 }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                <thead>
+                  <tr style={{ background: "#1a2e1a" }}>
+                    <th style={{ padding: "10px 14px", textAlign: "left", color: "rgba(255,255,255,0.7)", fontSize: 11 }}>Article</th>
+                    <th style={{ padding: "10px 12px", textAlign: "center", color: "#4ade80", fontSize: 11 }}>📦 Sam → Mar</th>
+                    <th style={{ padding: "10px 12px", textAlign: "center", color: "#4ade80", fontSize: 11 }}>📦 Mar → Ven</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {articles.map((art, idx) => {
+                    const stockKey = art.stockNom || art.id;
+                    const stockQty = stocks[stockKey] ?? 0;
+                    const ventesJours = ventes[art.id] || 0;
+                    const venteJour = joursVentes > 0 ? ventesJours / joursVentes : 0;
+                    const backStockSam = Math.max(0, stockQty - venteJour * 4);
+                    const cmdSam = Math.max(0, Math.ceil(venteJour * 6 - backStockSam));
+                    const cmdSamArrondi = art.colisCommande > 1 ? Math.ceil(cmdSam / art.colisCommande) * art.colisCommande : cmdSam;
+                    const backStockMar = Math.max(0, stockQty - venteJour * 5);
+                    const cmdMar = Math.max(0, Math.ceil(venteJour * 6 - backStockMar));
+                    const cmdMarArrondi = art.colisCommande > 1 ? Math.ceil(cmdMar / art.colisCommande) * art.colisCommande : cmdMar;
+                    if (cmdSamArrondi === 0 && cmdMarArrondi === 0) return null;
                     return (
-                      <div key={art.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 18px", borderBottom: "1px solid #f0f0f0", background: idx % 2 === 0 ? "#fff" : "#fafaf9" }}>
-                        <div>
-                          <p style={{ margin: 0, fontWeight: 700, fontSize: 15, color: "#1a2e1a" }}>{art.nom}</p>
-                          {art.colisCommande > 1 && <p style={{ margin: 0, fontSize: 11, color: "#9ca3af" }}>Conditionné ×{art.colisCommande}</p>}
-                        </div>
-                        <div style={{ textAlign: "right" }}>
-                          <p style={{ margin: 0, fontSize: 22, fontWeight: 900, color: "#16a34a", fontFamily: "'Syne', sans-serif" }}>{aCommander}</p>
-                          <p style={{ margin: 0, fontSize: 11, color: "#9ca3af" }}>colis</p>
-                        </div>
-                      </div>
+                      <tr key={art.id} style={{ background: idx % 2 === 0 ? "#fff" : "#fafaf9", borderBottom: "1px solid #f0f0f0" }}>
+                        <td style={{ padding: "10px 14px", fontWeight: 600 }}>{art.nom}</td>
+                        <td style={{ padding: "10px 12px", textAlign: "center", fontWeight: 800, fontSize: 16, color: cmdSamArrondi > 0 ? "#16a34a" : "#9ca3af" }}>{cmdSamArrondi > 0 ? cmdSamArrondi : "—"}</td>
+                        <td style={{ padding: "10px 12px", textAlign: "center", fontWeight: 800, fontSize: 16, color: cmdMarArrondi > 0 ? "#16a34a" : "#9ca3af" }}>{cmdMarArrondi > 0 ? cmdMarArrondi : "—"}</td>
+                      </tr>
                     );
                   })}
-                </div>
+                </tbody>
+              </table>
+            </div>
 
-                {/* Total */}
-                <div style={{ background: "#f0fdf4", borderRadius: 14, padding: "14px 18px", border: "1.5px solid #bbf7d0", marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <p style={{ margin: 0, fontWeight: 700, color: "#16a34a", fontSize: 15 }}>Total colis</p>
-                  <p style={{ margin: 0, fontWeight: 900, color: "#16a34a", fontSize: 24, fontFamily: "'Syne', sans-serif" }}>
-                    {articles.reduce((sum, art) => sum + calcCommande(art).aCommander, 0)}
-                  </p>
-                </div>
-
-                {/* Copier */}
-                <button onClick={() => {
-                  const lignes = articles
-                    .filter(art => calcCommande(art).aCommander > 0)
-                    .map(art => `${art.nom} : ${calcCommande(art).aCommander} colis`)
-                    .join("\n");
-                  const texte = `COMMANDE YUKON — ${typeCommande === "mercredi" ? "Mercredi" : "Vendredi"} ${new Date().toLocaleDateString("fr-FR")}\n\n${lignes}\n\nTotal : ${articles.reduce((s, a) => s + calcCommande(a).aCommander, 0)} colis`;
-                  navigator.clipboard.writeText(texte).then(() => alert("✅ Copié dans le presse-papier !"));
-                }} style={{ width: "100%", padding: "14px", borderRadius: 14, border: "none", background: "#c8a84b", color: "#0a0a0a", cursor: "pointer", fontSize: 15, fontWeight: 800, fontFamily: "'Syne', sans-serif", marginBottom: 10 }}>
-                  📋 Copier la commande
-                </button>
-              </>
-            )}
+            {/* Bouton copier */}
+            <button onClick={async () => {
+              const lignes = articles
+                .map(art => {
+                  const stockKey = art.stockNom || art.id;
+                  const stockQty = stocks[stockKey] ?? 0;
+                  const venteJour = joursVentes > 0 ? (ventes[art.id] || 0) / joursVentes : 0;
+                  const cmdSam = Math.max(0, art.colisCommande > 1 ? Math.ceil(Math.max(0, Math.ceil(venteJour * 6 - Math.max(0, stockQty - venteJour * 4))) / art.colisCommande) * art.colisCommande : Math.max(0, Math.ceil(venteJour * 6 - Math.max(0, stockQty - venteJour * 4))));
+                  const cmdMar = Math.max(0, art.colisCommande > 1 ? Math.ceil(Math.max(0, Math.ceil(venteJour * 6 - Math.max(0, stockQty - venteJour * 5))) / art.colisCommande) * art.colisCommande : Math.max(0, Math.ceil(venteJour * 6 - Math.max(0, stockQty - venteJour * 5))));
+                  if (cmdSam === 0 && cmdMar === 0) return null;
+                  return `${art.nom} : Sam ${cmdSam > 0 ? cmdSam : "—"} · Mar ${cmdMar > 0 ? cmdMar : "—"}`;
+                })
+                .filter(Boolean)
+                .join("\n");
+              // Sauvegarder comme dernière commande
+              const newDern: Record<string, number> = {};
+              articles.forEach(art => {
+                const stockKey = art.stockNom || art.id;
+                const stockQty = stocks[stockKey] ?? 0;
+                const venteJour = joursVentes > 0 ? (ventes[art.id] || 0) / joursVentes : 0;
+                const cmdSam = Math.max(0, art.colisCommande > 1 ? Math.ceil(Math.max(0, Math.ceil(venteJour * 6 - Math.max(0, stockQty - venteJour * 4))) / art.colisCommande) * art.colisCommande : Math.max(0, Math.ceil(venteJour * 6 - Math.max(0, stockQty - venteJour * 4))));
+                if (cmdSam > 0) newDern[art.id] = cmdSam;
+              });
+              await update(ref(db, "yukon/dernieres_commandes"), newDern);
+              setDernCmd(newDern);
+              const texte = `COMMANDE YUKON — ${new Date().toLocaleDateString("fr-FR")}\nVentes sur ${joursVentes}j\n\n${lignes}`;
+              navigator.clipboard.writeText(texte).then(() => alert("✅ Copié !"));
+            }} style={{ width: "100%", padding: "14px", borderRadius: 14, border: "none", background: "#c8a84b", color: "#0a0a0a", cursor: "pointer", fontSize: 15, fontWeight: 800, fontFamily: "'Syne', sans-serif" }}>
+              📋 Copier la commande
+            </button>
           </div>
         )}
       </div>
