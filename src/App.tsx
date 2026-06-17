@@ -2670,6 +2670,7 @@ function YukonApp({ onClose }: { onClose: () => void }) {
   const [page, setPage] = useState<"calcul" | "articles" | "recap">("calcul");
   const [articles, setArticles] = useState<any[]>([]);
   const [ventes, setVentes] = useState<Record<string, number>>({});
+  const [ventesHebdo, setVentesHebdo] = useState<Record<string, number>>({});
   const [stocks, setStocks] = useState<Record<string, number>>({});
   const [typeCommande, setTypeCommande] = useState<"mercredi" | "vendredi">(
     new Date().getDay() === 5 ? "vendredi" : "mercredi"
@@ -2698,6 +2699,15 @@ function YukonApp({ onClose }: { onClose: () => void }) {
         setArticles(YUKON_ARTICLES_DEFAULT);
         update(ref(db, "yukon/articles"), Object.fromEntries(YUKON_ARTICLES_DEFAULT.map(a => [a.id, a])));
       }
+    });
+    return () => unsub();
+  }, []);
+
+  // Charger ventes hebdo
+  useEffect(() => {
+    const weekKey = getWeekKey(-1);
+    const unsub = onValue(ref(db, `yukon/ventes_hebdo/${weekKey}`), (snap: any) => {
+      if (snap.exists()) setVentesHebdo(snap.val());
     });
     return () => unsub();
   }, []);
@@ -2830,6 +2840,12 @@ function YukonApp({ onClose }: { onClose: () => void }) {
     };
     loadSessions();
   }, []);
+
+  const saveVentesHebdo = async (newVentes: Record<string, number>) => {
+    setVentesHebdo(newVentes);
+    const weekKey = getWeekKey(-1);
+    await update(ref(db, `yukon/ventes_hebdo/${weekKey}`), newVentes);
+  };
 
   const saveVentes = async (newVentes: Record<string, number>) => {
     setVentes(newVentes);
@@ -3018,19 +3034,15 @@ function YukonApp({ onClose }: { onClose: () => void }) {
                     const stockKey = art.stockNom || art.id;
                     const stockQty = stocks[stockKey] ?? 0;
                     const stockMissing = stockDate && stocks[stockKey] === undefined;
-                    const ventesJours = ventes[art.id] || 0;
-                    const venteJour = joursVentes > 0 ? ventesJours / joursVentes : 0;
-                    // Formules exactes du tableau Excel
-                    // Back Stock = Stock - Ventes (sur la période saisie)
+                    const ventesJours = ventes[art.id] || 0;       // Sales (4j) — saisie
+                    const ventesSemaine = ventesHebdo[art.id] || 0; // Weekly Sales — saisie
+                    // Back Stock = MAX(0, Stock - Sales)
                     const backStock = Math.max(0, stockQty - ventesJours);
-                    // Weekly Sales = Ventes / joursVentes × 7
-                    const ventesSemaine = Math.round(venteJour * 7);
-                    // Saturday Order = Weekly Sales - Back Stock (arrondi au colis)
-                    const cmdSamRaw = Math.max(0, ventesSemaine - backStock);
+                    // Saturday Order = ROUND(MAX(0, (WeeklySales×1.1) - BackStock) × 60%, 0)
+                    const cmdSamRaw = Math.round(Math.max(0, (ventesSemaine * 1.1) - backStock) * 0.6);
                     const cmdSam = art.colisCommande > 1 ? Math.ceil(cmdSamRaw / art.colisCommande) * art.colisCommande : cmdSamRaw;
-                    // Tuesday Order = Weekly Sales - (Back Stock - Ventes sam→mar soit ~4j supplémentaires)
-                    const backStockMar = Math.max(0, backStock - venteJour * 4);
-                    const cmdMarRaw = Math.max(0, ventesSemaine - backStockMar);
+                    // Tuesday Order = ROUND(MAX(0, WeeklySales - BackStock) × 40%, 0)
+                    const cmdMarRaw = Math.round(Math.max(0, ventesSemaine - backStock) * 0.4);
                     const cmdMar = art.colisCommande > 1 ? Math.ceil(cmdMarRaw / art.colisCommande) * art.colisCommande : cmdMarRaw;
                     const dernQty = arrivageQty[stockKey];
                     const rowBg = stockMissing ? "#fff5f5" : idx % 2 === 0 ? "#fff" : "#fafaf9";
@@ -3069,9 +3081,11 @@ function YukonApp({ onClose }: { onClose: () => void }) {
                         <td style={{ padding: "7px 4px", textAlign: "center", fontWeight: 700, color: ventesJours > 0 ? (backStock > 0 ? "#15803d" : "#dc2626") : "#9ca3af", borderBottom: "1px solid #f0f0f0", fontSize: 13 }}>
                           {ventesJours > 0 ? backStock : "—"}
                         </td>
-                        {/* Ventes semaine = Ventes/j × 7 */}
-                        <td style={{ padding: "7px 4px", textAlign: "center", color: "#6b7280", borderBottom: "1px solid #f0f0f0", fontSize: 12 }}>
-                          {ventesJours > 0 ? ventesSemaine : "—"}
+                        {/* Ventes semaine — saisie manuelle */}
+                        <td style={{ padding: "7px 4px", textAlign: "center", borderBottom: "1px solid #f0f0f0" }}>
+                          <input type="number" min="0" value={ventesHebdo[art.id] || ""} placeholder="0"
+                            onChange={e => saveVentesHebdo({ ...ventesHebdo, [art.id]: parseInt(e.target.value) || 0 })}
+                            style={{ width: "100%", maxWidth: 55, padding: "3px 4px", border: "1.5px solid #d1d5db", borderRadius: 6, fontSize: 12, textAlign: "center", outline: "none" }} />
                         </td>
                         {/* Cmd Samedi */}
                         <td style={{ padding: "7px 4px", textAlign: "center", fontWeight: 800, fontSize: 15, color: cmdSam > 0 ? "#16a34a" : "#9ca3af", borderBottom: "1px solid #f0f0f0", borderLeft: "2px solid #bbf7d0", background: cmdSam > 0 ? "#f0fdf4" : "transparent" }}>
