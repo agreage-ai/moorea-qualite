@@ -2959,9 +2959,21 @@ function YukonApp({ onClose }: { onClose: () => void }) {
                   // Remplir le stock avec les quantités de cet arrivage
                   const newStocks = { ...stocks };
                   groupe.articles.forEach((a: any) => {
-                    const nomUpper = (a.produit || a.article || "").toUpperCase().trim();
+                    const nomArrivage = (a.produit || a.article || "").toUpperCase().trim();
                     const qte = a.quantite || a.nb_colis || 0;
-                    if (nomUpper && qte > 0) newStocks[nomUpper] = qte;
+                    if (!nomArrivage || !qte) return;
+                    // Cherche l'article Yukon correspondant par stockNom ou nom
+                    const artYukon = articles.find((art: any) => {
+                      const stockNom = (art.stockNom || art.nom || "").toUpperCase().trim();
+                      return stockNom === nomArrivage || stockNom.includes(nomArrivage) || nomArrivage.includes(stockNom);
+                    });
+                    if (artYukon) {
+                      const stockKey = artYukon.stockNom || artYukon.id;
+                      newStocks[stockKey] = (newStocks[stockKey] || 0) + qte;
+                    } else {
+                      // Fallback : enregistre avec le nom brut
+                      newStocks[nomArrivage] = (newStocks[nomArrivage] || 0) + qte;
+                    }
                   });
                   setStocks(newStocks);
                   setStockDate(dateId);
