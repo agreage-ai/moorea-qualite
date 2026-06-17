@@ -1,4 +1,4 @@
--import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import jsPDF from "jspdf";
 import emailjs from "@emailjs/browser";
 import { db, ref, push, onValue, update, remove, auth, googleProvider, signInWithPopup, signOut, onAuthStateChanged } from "./firebase";
@@ -2715,16 +2715,30 @@ function YukonApp({ onClose }: { onClose: () => void }) {
   const [arrivagesYukon, setArrivagesYukon] = useState<any[]>([]);
   const [arrivageSelId, setArrivageSelId] = useState<string>("");
 
-  // Charger les arrivages Yukon depuis Firebase
+  // Charger les arrivages Yukon depuis Firebase — groupés par date
   useEffect(() => {
     const unsub = onValue(ref(db, "arrivages"), (snap: any) => {
       if (!snap.exists()) return;
       const all = Object.entries(snap.val()).map(([id, val]: any) => ({ id, ...val }));
       // Filtrer uniquement Yukon International
-      const yukon = all.filter((a: any) =>
-        (a.fournisseur || "").toUpperCase().includes("YUKON")
-      ).sort((a: any, b: any) => (b.date || "").localeCompare(a.date || ""));
-      setArrivagesYukon(yukon);
+      const yukon = all.filter((a: any) => (a.fournisseur || "").toUpperCase().includes("YUKON"));
+      // Grouper par date
+      const byDate: Record<string, any[]> = {};
+      yukon.forEach((a: any) => {
+        const date = a.date || "—";
+        if (!byDate[date]) byDate[date] = [];
+        byDate[date].push(a);
+      });
+      // Transformer en liste triée par date décroissante
+      const grouped = Object.entries(byDate)
+        .sort(([a], [b]) => b.localeCompare(a))
+        .map(([date, arts]) => ({
+          id: date,
+          date,
+          articles: arts,
+          label: `${date} · ${arts.length} article${arts.length > 1 ? "s" : ""} · ${arts.reduce((s: number, a: any) => s + (a.nb_colis || 0), 0)} colis`
+        }));
+      setArrivagesYukon(grouped);
     });
     return () => unsub();
   }, []);
@@ -2938,9 +2952,9 @@ function YukonApp({ onClose }: { onClose: () => void }) {
               {arrivagesYukon.length > 0 ? (
                 <select value={arrivageSelId} onChange={e => setArrivageSelId(e.target.value)}
                   style={{ width: "100%", padding: "8px 10px", border: "1.5px solid #c8a84b", borderRadius: 8, fontSize: 12, background: "#fff", cursor: "pointer" }}>
-                  <option value="">— Sélectionner un arrivage —</option>
-                  {arrivagesYukon.map(a => (
-                    <option key={a.id} value={a.id}>{a.date} · {a.produit} · {a.nb_colis} colis</option>
+                  <option value="">— Sélectionner une date d'arrivage —</option>
+                  {arrivagesYukon.map(g => (
+                    <option key={g.id} value={g.id}>{g.label}</option>
                   ))}
                 </select>
               ) : (
