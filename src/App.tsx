@@ -1059,6 +1059,42 @@ function ArrivageTraiteRow({ arrivage: a, onDelete, onOuvreRapport }: { arrivage
             {a.rapport?.observations && <span style={{ fontSize: 11, background: "rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.7)", padding: "3px 8px", borderRadius: 8 }}>📝 {a.rapport.observations}</span>}
           </div>
 
+          {/* Colis manquant — alerte WhatsApp */}
+          <div style={{ marginBottom: 10, background: "rgba(59,130,246,0.1)", border: "1px solid rgba(59,130,246,0.3)", borderRadius: 10, padding: "10px 12px" }}>
+            <p style={{ margin: "0 0 8px", fontWeight: 700, fontSize: 12, color: "#93c5fd" }}>📦 Colis manquant</p>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              <span style={{ fontSize: 12, color: "rgba(255,255,255,0.6)" }}>Attendus : <strong style={{ color: "#fff" }}>{a.quantite}</strong></span>
+              <input type="number" min="0" max={a.quantite} id={`colis-recus-${a.id}`}
+                placeholder="Colis reçus"
+                style={{ width: 110, padding: "6px 10px", border: "1px solid rgba(59,130,246,0.4)", borderRadius: 8, background: "rgba(0,0,0,0.3)", color: "#fff", fontSize: 13, outline: "none" }} />
+              <button onClick={() => {
+                const input = document.getElementById(`colis-recus-${a.id}`) as HTMLInputElement;
+                const recu = parseInt(input?.value || "0");
+                const attendu = a.quantite || 0;
+                const manquant = attendu - recu;
+                if (!recu || recu >= attendu) { alert("Saisis un nombre de colis reçus inférieur aux attendus"); return; }
+                const produit = a.produit || a.article || a.nom || `Lot #${a.lot_interne}`;
+                const now = new Date().toLocaleString("fr-FR");
+                const msg = `📦 ALERTE COLIS MANQUANT — MOOREA
+${now}
+
+Produit : ${produit}
+Fournisseur : ${a.fournisseur}
+Lot Moorea : ${a.lot_interne || "—"}
+Date arrivage : ${a.date || "—"}
+
+Attendus : ${attendu} colis
+Reçus : ${recu} colis
+❌ Manquants : ${manquant} colis
+
+Merci de régulariser.`;
+                window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, "_blank");
+              }} style={{ padding: "6px 14px", borderRadius: 8, border: "none", background: "#3b82f6", color: "#fff", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>
+                📲 Envoyer alerte
+              </button>
+            </div>
+          </div>
+
           {/* Déclarer une perte */}
           <div style={{ marginBottom: 10, background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 10, padding: "10px 12px" }}>
             <p style={{ margin: "0 0 8px", fontWeight: 700, fontSize: 12, color: "#fca5a5" }}>🗑 Déclarer une perte</p>
@@ -5837,7 +5873,7 @@ _PDF joint_`;
               <div style={{ marginBottom: 16, background: rapportArrivage.litige ? "#fef2f2" : "#f0fdf4", border: `2px solid ${rapportArrivage.litige ? "#fca5a5" : "#bbf7d0"}`, borderRadius: 16, padding: "12px 18px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <div>
                   <p style={{ margin: "0 0 3px", fontSize: 11, fontWeight: 700, color: rapportArrivage.litige ? "#991b1b" : "#15803d", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                    {rapportArrivage.litige ? "⚠️ Rapport de litige" : "📋 Rapport d'agrément"}
+                    {rapportArrivage.litige ? "⚠️ Rapport de litige" : "📋 Rapport d'agréage"}
                   </p>
                   <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "#1a2e1a" }}>{rapportArrivage.produit} · {rapportArrivage.fournisseur}</p>
                   <p style={{ margin: "2px 0 0", fontSize: 12, color: "#6b7280" }}>
