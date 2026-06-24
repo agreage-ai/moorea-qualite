@@ -461,9 +461,10 @@ async function imprimerEtiquettePalette(arrivage: any, paletteIndex?: number, co
     : `<img src="${qrSvgUrl}" style="width:130px;height:130px;border:3px solid #000" onerror="this.style.display='none'" />`;
 
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${lotLabel}</title>
-<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial Black,Arial,sans-serif;background:#fff;display:flex;justify-content:center;padding:20px}.etiquette{width:200mm;min-height:140mm;background:#FFE600;border:4px solid #000;padding:8mm;display:flex;flex-direction:column;gap:5mm}.lot{font-size:52px;font-weight:900;color:#000;letter-spacing:2px;border-bottom:3px solid #000;padding-bottom:4mm}.produit{font-size:28px;font-weight:900;color:#000;line-height:1.2}.fourn{font-size:22px;font-weight:700;color:#000}.infos{display:grid;grid-template-columns:1fr 1fr;gap:3mm}.info-cell{background:rgba(0,0,0,0.08);border-radius:3px;padding:3mm 4mm}.info-lbl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#333}.info-val{font-size:20px;font-weight:900;color:#000}.bottom{display:flex;justify-content:space-between;align-items:flex-end;margin-top:auto}.qty{font-size:80px;font-weight:900;color:#000;line-height:1}.unite{font-size:24px;font-weight:700;color:#000;margin-top:2mm}.qr-block{text-align:right}.qr-block p{font-size:11px;font-weight:700;color:#000;margin-top:2mm;text-align:center}.btn-print{position:fixed;top:10px;right:10px;padding:9px 18px;background:#000;color:#FFE600;border:none;border-radius:8px;font-weight:900;cursor:pointer;font-size:14px}@media print{.btn-print{display:none}body{padding:0}}</style>
+<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial Black,Arial,sans-serif;background:#fff;display:flex;justify-content:center;padding:20px}.etiquette{width:200mm;min-height:140mm;background:#FFE600;border:4px solid #000;padding:8mm;display:flex;flex-direction:column;gap:5mm}.lot{font-size:52px;font-weight:900;color:#000;letter-spacing:2px;border-bottom:3px solid #000;padding-bottom:4mm}.produit{font-size:28px;font-weight:900;color:#000;line-height:1.2}.fourn{font-size:22px;font-weight:700;color:#000}.infos{display:grid;grid-template-columns:1fr 1fr;gap:3mm}.info-cell{background:rgba(0,0,0,0.08);border-radius:3px;padding:3mm 4mm}.info-lbl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#333}.info-val{font-size:20px;font-weight:900;color:#000}.bottom{display:flex;justify-content:space-between;align-items:flex-end;margin-top:auto}.qty{font-size:80px;font-weight:900;color:#000;line-height:1}.unite{font-size:24px;font-weight:700;color:#000;margin-top:2mm}.qr-block{text-align:right}.qr-block p{font-size:11px;font-weight:700;color:#000;margin-top:2mm;text-align:center}.btn-print{position:fixed;top:10px;right:10px;padding:9px 18px;background:#000;color:#FFE600;border:none;border-radius:8px;font-weight:900;cursor:pointer;font-size:14px}.btn-close{position:fixed;top:10px;right:130px;padding:9px 18px;background:#666;color:#fff;border:none;border-radius:8px;font-weight:900;cursor:pointer;font-size:14px}@media print{.btn-print,.btn-close{display:none}body{padding:0}}</style>
 </head><body>
 <button class="btn-print" onclick="window.print()">IMPRIMER</button>
+<button class="btn-close" onclick="window.close()">✕ Fermer</button>
 <div class="etiquette">
   <div class="lot">${lotLabel}</div>
   <div class="produit">${(arrivage.produit || "—").toUpperCase()}</div>
@@ -898,7 +899,7 @@ function HistoriqueArrivageRow({ a, rapport, borderColor, onRapport, onLitige, o
         <div style={{ flex: 1, minWidth: 0 }}>
           <p style={{ margin: "0 0 4px", fontWeight: 700, fontSize: 14, color: "#1a2e1a", fontFamily: "'Syne', sans-serif" }}>
             {a.lot_interne && <span style={{ color: "#c8a84b", fontWeight: 800, marginRight: 8 }}>#{a.lot_interne}</span>}
-            {a.produit}{a.variete ? ` · ${a.variete}` : ""}
+            {a.produit || a.article || a.nom || a.designation || `Article #${a.lot_interne}`}{a.variete ? ` · ${a.variete}` : ""}
             {a.hors_liste && <span style={{ marginLeft: 8, fontSize: 10, background: "#fff3e0", color: "#e65100", padding: "2px 7px", borderRadius: 10, fontWeight: 600 }}>Hors liste</span>}
             {a.destruction && <span style={{ marginLeft: 8, fontSize: 10, background: "#fef2f2", color: "#dc2626", padding: "2px 7px", borderRadius: 10, fontWeight: 600 }}>🗑 {a.destruction.quantite} détruits</span>}
           </p>
@@ -1033,7 +1034,8 @@ function ArrivageTraiteRow({ arrivage: a, onDelete, onOuvreRapport }: { arrivage
         <div style={{ flex: 1 }}>
           <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: "#fff" }}>
             {a.lot_interne && <span style={{ color: "#c8a84b", marginRight: 8 }}>#{a.lot_interne}</span>}
-            {a.produit || a.article || a.nom || <span style={{ color: "rgba(255,255,255,0.3)", fontStyle: "italic" }}>Sans nom</span>}
+            {a.produit || a.article || a.nom || a.designation || a.libelle || a.description ||
+              <span style={{ color: "rgba(255,255,255,0.3)", fontStyle: "italic" }}>Article #{a.lot_interne || a.id?.slice(-4)}</span>}
             <span style={{ fontWeight: 400, color: "rgba(255,255,255,0.5)", marginLeft: 6, fontSize: 12 }}>· {a.fournisseur}</span>
           </p>
           <p style={{ margin: "2px 0 0", fontSize: 11, color: "rgba(255,255,255,0.4)" }}>
