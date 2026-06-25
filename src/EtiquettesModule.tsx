@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { getFirestore, collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from "firebase/firestore";
 import { initializeApp, getApps } from "firebase/app";
+import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, AlignmentType, BorderStyle, WidthType } from "docx";
+import { saveAs } from "file-saver";
 
 const firebaseConfig = {
   apiKey: "AIzaSyCnWg6Y2THauxyM4yk_QqhOcyybU0-WRI4",
@@ -49,21 +51,10 @@ const DEFAUT: Record<string, string> = {
 };
 
 async function loadDocxLib() {
-  let docxLib = (window as any).docx;
-  if (!docxLib) {
-    await new Promise<void>((res, rej) => {
-      const s = document.createElement("script");
-      s.src = "https://unpkg.com/docx@8.5.0/build/index.js";
-      s.onload = () => res(); s.onerror = () => rej();
-      document.head.appendChild(s);
-    });
-    docxLib = (window as any).docx;
-  }
-  return docxLib;
+  return true; // lib déjà importée via npm
 }
 
-function buildEtiquetteSection(p: Record<string, string>, docxLib: any, isLast: boolean) {
-  const { Paragraph, TextRun, Table, TableRow, TableCell, AlignmentType, BorderStyle, WidthType, PageBreak } = docxLib;
+function buildEtiquetteSection(p: Record<string, string>) {
   const W = 6236, MARGIN = 200, SIDE_PAD = 200;
   const TBL_W = W - MARGIN * 2 - SIDE_PAD * 2;
   const COL_W = Math.floor(TBL_W / 2);
@@ -91,75 +82,57 @@ function buildEtiquetteSection(p: Record<string, string>, docxLib: any, isLast: 
     ]})]
   });
 
-  const content = [
-    para([t(`اسم المنتج: ${p.nomArabe}`, 17, true)]),
-    para([t(`Product Name: ${p.nomAnglais}`, 15)]),
-    sep(),
-    row2([t(`Origin: ${p.origine}`, 13)], [t(`المنشأ: ${p.origineArabe}`, 13, true)]),
-    row2([t(`Lot No: ${p.lotNo}`, 13)], [t("رقم اللوت:", 13, true)]),
-    sep(),
-    para([t(p.ingredientsArabe, 12, true)]),
-    para([t(`Ingredients: ${p.ingredientsAnglais}`, 12)]),
-    sep(),
-    para([t(`نسبة الدسم: ${p.tauxMatiere}٪   |   نسبة الرطوبة: ${p.tauxHumidite}٪`, 12, true)]),
-    sep(),
-    row2([t(`Net Weight: ${p.poids} KG`, 13)], [t("الوزن الصافي: كجم", 13, true)]),
-    sep(),
-    para([t("ملاحظة Notice/", 12)]),
-    para([t("- Dairy was produced from an animal that did not show symptoms of anthrax during milking", 10)]),
-    para([t("- The milk was immediately cooled and heat treated at least enough for the pasteurization", 10)]),
-    sep(),
-    row2([t(`Prod. Date: ${p.prodDate}`, 12)], [t("تاريخ الإنتاج:", 12, true)]),
-    row2([t(`Exp. Date: ${p.expDate}`, 12)], [t("تاريخ الانتهاء:", 12, true)]),
-    sep(),
-    para([t("المعلومات الغذائية لكل 100 غرام", 13, true)]),
-    para([t(p.nutritionArabe, 10, true)]),
-    para([t("Nutritional Value per 100 Grs", 12)]),
-    para([t(p.nutritionAnglais, 10)]),
-    sep(),
-    row2([t(`Exporter: ${p.exporteur}`, 12)], [t(`المصدر: ${p.exporteurArabe}`, 12, true)]),
-    row2([t(`Importer: ${p.importeur}`, 12)], [t(`المستورد: ${p.importeurArabe}`, 12, true)]),
-    para([t(p.website, 12)]),
-  ];
-
-  const section: any = {
+  return {
     properties: {
-      page: {
-        size: { width: W, height: 9921 },
-        margin: { top: MARGIN, right: MARGIN, bottom: MARGIN, left: MARGIN + SIDE_PAD }
-      }
+      page: { size: { width: W, height: 9921 }, margin: { top: MARGIN, right: MARGIN, bottom: MARGIN, left: MARGIN + SIDE_PAD } }
     },
     children: [
       new Paragraph({ spacing: { before: 0, after: 40 }, children: [] }),
       new Table({
-        width: { size: TBL_W, type: WidthType.DXA },
-        columnWidths: [TBL_W],
+        width: { size: TBL_W, type: WidthType.DXA }, columnWidths: [TBL_W],
         rows: [new TableRow({ children: [new TableCell({
-          borders,
-          width: { size: TBL_W, type: WidthType.DXA },
-          margins: { top: 50, bottom: 50, left: 80, right: 80 },
-          children: content
+          borders, width: { size: TBL_W, type: WidthType.DXA }, margins: { top: 50, bottom: 50, left: 80, right: 80 },
+          children: [
+            para([t(`اسم المنتج: ${p.nomArabe}`, 17, true)]),
+            para([t(`Product Name: ${p.nomAnglais}`, 15)]),
+            sep(),
+            row2([t(`Origin: ${p.origine}`, 13)], [t(`المنشأ: ${p.origineArabe}`, 13, true)]),
+            row2([t(`Lot No: ${p.lotNo}`, 13)], [t("رقم اللوت:", 13, true)]),
+            sep(),
+            para([t(p.ingredientsArabe, 12, true)]),
+            para([t(`Ingredients: ${p.ingredientsAnglais}`, 12)]),
+            sep(),
+            para([t(`نسبة الدسم: ${p.tauxMatiere}٪   |   نسبة الرطوبة: ${p.tauxHumidite}٪`, 12, true)]),
+            sep(),
+            row2([t(`Net Weight: ${p.poids} KG`, 13)], [t("الوزن الصافي: كجم", 13, true)]),
+            sep(),
+            para([t("ملاحظة Notice/", 12)]),
+            para([t("- Dairy was produced from an animal that did not show symptoms of anthrax during milking", 10)]),
+            para([t("- The milk was immediately cooled and heat treated at least enough for the pasteurization", 10)]),
+            sep(),
+            row2([t(`Prod. Date: ${p.prodDate}`, 12)], [t("تاريخ الإنتاج:", 12, true)]),
+            row2([t(`Exp. Date: ${p.expDate}`, 12)], [t("تاريخ الانتهاء:", 12, true)]),
+            sep(),
+            para([t("المعلومات الغذائية لكل 100 غرام", 13, true)]),
+            para([t(p.nutritionArabe, 10, true)]),
+            para([t("Nutritional Value per 100 Grs", 12)]),
+            para([t(p.nutritionAnglais, 10)]),
+            sep(),
+            row2([t(`Exporter: ${p.exporteur}`, 12)], [t(`المصدر: ${p.exporteurArabe}`, 12, true)]),
+            row2([t(`Importer: ${p.importeur}`, 12)], [t(`المستورد: ${p.importeurArabe}`, 12, true)]),
+            para([t(p.website, 12)]),
+          ]
         })] })]
       })
     ]
   };
-  return section;
 }
 
 async function generateMultiDocx(produits: Record<string, string>[], filename: string) {
-  const docxLib = await loadDocxLib();
-  const { Document, Packer } = docxLib;
-
-  const sections = produits.map((p, i) => buildEtiquetteSection(p, docxLib, i === produits.length - 1));
-
+  const sections = produits.map(p => buildEtiquetteSection(p));
   const document = new Document({ sections });
   const blob = await Packer.toBlob(document);
-  const url = URL.createObjectURL(blob);
-  const a = window.document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
+  saveAs(blob, filename);
 }
 
 async function parseDocx(file: File): Promise<Record<string, string>> {
@@ -167,18 +140,13 @@ async function parseDocx(file: File): Promise<Record<string, string>> {
     const reader = new FileReader();
     reader.onload = async (e) => {
       try {
-        let mammoth = (window as any).mammoth;
-        if (!mammoth) {
-          await new Promise<void>((res, rej) => {
-            const s = window.document.createElement("script");
-            s.src = "https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js";
-            s.onload = () => res(); s.onerror = () => rej();
-            window.document.head.appendChild(s);
-          });
-          mammoth = (window as any).mammoth;
-        }
-        const result = await mammoth.extractRawText({ arrayBuffer: e.target?.result });
-        const lines = result.value.split("\n").map((l: string) => l.trim()).filter(Boolean);
+        // Extraction basique du texte depuis le docx (XML)
+        const buf = e.target?.result as ArrayBuffer;
+        const uint8 = new Uint8Array(buf);
+        const text = new TextDecoder().decode(uint8);
+        const xmlMatch = text.match(/<w:t[^>]*>([^<]*)<\/w:t>/g) || [];
+        const lines = xmlMatch.map(m => m.replace(/<[^>]+>/g, "").trim()).filter(Boolean);
+
         const extract = (pattern: RegExp) => {
           for (const line of lines) { const m = line.match(pattern); if (m) return m[1]?.trim() || ""; }
           return "";
@@ -223,14 +191,10 @@ export default function EtiquettesModule({ onClose }: { onClose: () => void }) {
   // Lot d'impression — varForms par produit id
   const [lotSelects, setLotSelects] = useState<Set<string>>(new Set());
   const [lotVars, setLotVars] = useState<Record<string, Record<string, string>>>({});
-  const [libReady, setLibReady] = useState(!!(window as any).docx);
+  const [libReady, setLibReady] = useState(true);
 
   useEffect(() => {
     fetchProduits();
-    // Précharger la lib docx en arrière-plan
-    if (!(window as any).docx) {
-      loadDocxLib().then(() => setLibReady(true)).catch(() => {});
-    }
   }, []);
 
   async function fetchProduits() {
