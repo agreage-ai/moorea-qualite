@@ -3213,40 +3213,111 @@ function etqBuildPrint(produits: Record<string, string>[]): string {
 async function etqParseDocx(file: File): Promise<Record<string, string>> {
   return new Promise((resolve) => {
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       try {
-        const buf = e.target?.result as ArrayBuffer;
-        const bytes = new Uint8Array(buf);
-        let str = "";
-        const chunk = 8192;
-        for (let i = 0; i < bytes.length; i += chunk) {
-          str += String.fromCharCode(...Array.from(bytes.subarray(i, i + chunk)));
+        let JSZip = (window as any).JSZip;
+        if (!JSZip) {
+          await new Promise<void>((res, rej) => {
+            const s = document.createElement("script");
+            s.src = "https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js";
+            s.onload = () => res(); s.onerror = () => rej();
+            document.head.appendChild(s);
+          });
+          JSZip = (window as any).JSZip;
         }
-        const matches = str.match(/<w:t[^>]*>([^<]+)<\/w:t>/g) || [];
-        const lines = matches.map((m: string) => m.replace(/<[^>]+>/g, "").trim()).filter((l: string) => l.length > 0);
-        const extract = (pat: RegExp) => { for (const l of lines) { const m = l.match(pat); if (m) return m[1]?.trim() || ""; } return ""; };
-        const findAr = (kw: string) => lines.find((l: string) => l.includes(kw))?.replace(kw, "").trim() || "";
-        resolve({
-          ...ETQ_DEFAUT,
-          nomAnglais: extract(/Product Name[:\s]+(.+)/i) || lines.find((l: string) => /CHEESE|FROMAGE|BUTTER|CREAM/i.test(l)) || "",
-          nomArabe: lines.find((l: string) => /[\u0600-\u06FF]{4,}/.test(l) && !/المنشأ|المكونات|المستورد|المصدر|الطاقة/.test(l)) || "",
-          origine: extract(/Origin[:\s]+([A-Za-z ]+)/i),
-          origineArabe: findAr("المنشأ:"),
-          lotNo: extract(/Lot\s*No[:\s]+([A-Z0-9\-]+)/i),
-          poids: extract(/Net\s*Weight[:\s]+([\d.,]+)/i),
-          ingredientsArabe: findAr("المكونات:"),
-          ingredientsAnglais: extract(/Ingredients[:\s]+(.+)/i),
-          nutritionArabe: lines.find((l: string) => /الطاقة/.test(l)) || "",
-          nutritionAnglais: lines.find((l: string) => /^Energy[:\s]/i.test(l)) || "",
-          exporteur: extract(/Exporter[:\s]+(.+)/i),
-          exporteurArabe: findAr("المصدر:"),
-          importeur: extract(/Importer[:\s]+(.+)/i),
-          importeurArabe: findAr("المستورد:"),
-          website: extract(/(www\.[a-z0-9.\-]+)/i),
-          prodDate: extract(/Prod\.?\s*Date[:\s]+([\d\/\-]+)/i),
-          expDate: extract(/Exp\.?\s*Date[:\s]+([\d\/\-]+)/i),
+        const zip = await JSZip.loadAsync(e.target?.result);
+        const xmlFile = zip.file("word/document.xml");
+        if (!xmlFile) { resolve({ ...ETQ_DEFAUT }); return; }
+        const xml = await xmlFile.async("string");
+
+        // Reconstituer les paragraphes (grouper les w:t par paragraphe w:p)
+        const paras: string[] = [];
+        const paraMatches = xml.match(/<w:p[ >][\s\S]*?<\/w:p>/g) || [];
+        paraMatches.forEach((p: string) => {
+          const tMatches = p.match(/<w:t[^>]*>([^<]*)<\/w:t>/g) || [];
+          const text = tMatches.map((m: string) => m.replace(/<[^>]+>/g, "")).join("").trim();
+          if (text) paras.push(text);
         });
-      } catch { resolve({ ...ETQ_DEFAUT }); }
+
+        const find = (pat: RegExp) => { for (const p of paras) { const m = p.match(pat); if (m) return m[1]?.trim() || ""; } return ""; };
+        const findLine = (pat: RegExp) => paras.find((p: string) => pat.test(p)) || "";
+
+        // Nom arabe — ligne qui commence par "اسم المنتج:"
+        const nomArabeLine = findLine(/اسم المنتج:/);
+        const nomArabe = nomArabeLine.replace(/اسم المنتج:\s*/, "").trim();
+
+        // Nom anglais
+        const nomAnglaisLine = findLine(/Product Name:/i);
+        const nomAnglais = nomAnglaisLine.replace(/Product Name:\s*/i, "").trim();
+
+        // Origin + المنشأ sur la même ligne
+        const origineLine = findLine(/Origin:/i);
+        const origine = origineLine.match(/Origin:\s*([A-Za-z ]+)/i)?.[1]?.trim() || "";
+        const origineArabe = origineLine.match(/المنشأ:\s*(.+)/)?.[1]?.trim() || "";
+
+        // Lot No
+        const lotLine = findLine(/Lot No:/i);
+        const lotNo = lotLine.match(/Lot No:\s*([A-Z0-9\-]+)/i)?.[1]?.trim() || "";
+
+        // Ingrédients arabe
+        const ingAr = findLine(/المكونات:/).replace(/المكونات:\s*/, "").trim();
+
+        // Ingrédients anglais (peut être sur plusieurs lignes)
+        const ingEnIdx = paras.findIndex((p: string) => /^Ingredients:/i.test(p));
+        let ingEn = "";
+        if (ingEnIdx >= 0) {
+          ingEn = paras[ingEnIdx].replace(/^Ingredients:\s*/i, "").trim();
+          if (ingEnIdx + 1 < paras.length && !/^[A-Z]/.test(paras[ingEnIdx + 1][0] || "")) {
+            ingEn += " " + paras[ingEnIdx + 1].trim();
+          }
+        }
+
+        // Taux matière / humidité
+        const tauxMLine = findLine(/الدسم/);
+        const tauxMatiere = tauxMLine.match(/(\d+)٪/)?.[1] || "";
+        const tauxHLine = findLine(/الرطوبة/);
+        const tauxHumidite = tauxHLine.match(/(\d+)٪/)?.[1] || "";
+
+        // Poids
+        const poidsLine = findLine(/Net Weight:/i);
+        const poids = poidsLine.match(/Net Weight:\s*([\d.,]+)/i)?.[1] || "";
+
+        // Dates
+        const prodLine = findLine(/Prod\.\s*Date/i);
+        const prodDate = prodLine.match(/([\d]{2}\/[\d]{2}\/[\d]{4})/)?.[1] || prodLine.match(/([\d]{2}\/[\d]{2}\/[\d]{2,4})/)?.[1] || "";
+        const expLine = findLine(/Exp\.\s*Date/i);
+        const expDate = expLine.match(/([\d]{2}\/[\d]{2}\/[\d]{4})/)?.[1] || expLine.match(/([\d]{2}\/[\d]{2}\/[\d]{2,4})/)?.[1] || "";
+
+        // Nutrition
+        const nutAr1 = findLine(/الطاقة/);
+        const nutAr2Idx = paras.findIndex((p: string) => /الطاقة/.test(p));
+        const nutArabe = nutAr2Idx >= 0 ? paras[nutAr2Idx] + (paras[nutAr2Idx + 1] ? " " + paras[nutAr2Idx + 1] : "") : "";
+        const nutEnIdx = paras.findIndex((p: string) => /^KJ\s/i.test(p) || /^Energy/i.test(p));
+        const nutAnglais = nutEnIdx >= 0 ? paras[nutEnIdx] + (paras[nutEnIdx + 1] ? " " + paras[nutEnIdx + 1] : "") : "";
+
+        // Exportateur / Importateur
+        const expLine2 = findLine(/Exporter:/i);
+        const exporteur = expLine2.match(/Exporter:\s*([^M]+)/i)?.[1]?.trim() || "";
+        const exporteurArabe = expLine2.match(/المصدر:\s*(.+)/)?.[1]?.trim() || "";
+        const impLine = findLine(/Importer:/i);
+        const importeur = impLine.match(/Importer:\s*([^\u0600-\u06FF]+)/i)?.[1]?.trim() || "";
+        const importeurArabe = impLine.match(/المستورد:\s*(.+)/)?.[1]?.trim() || "";
+
+        // Website
+        const website = find(/(www\.[a-z0-9.\-]+)/i);
+
+        resolve({
+          nomArabe, nomAnglais, origine, origineArabe, lotNo,
+          ingredientsArabe: ingAr, ingredientsAnglais: ingEn,
+          tauxMatiere, tauxHumidite, poids,
+          prodDate, expDate,
+          nutritionArabe: nutArabe, nutritionAnglais: nutAnglais,
+          exporteur, exporteurArabe, importeur, importeurArabe, website,
+        });
+      } catch (err) {
+        console.error("parseDocx:", err);
+        resolve({ ...ETQ_DEFAUT });
+      }
     };
     reader.onerror = () => resolve({ ...ETQ_DEFAUT });
     reader.readAsArrayBuffer(file);
