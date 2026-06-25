@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import EtiquettesModule from "./EtiquettesModule";
 import jsPDF from "jspdf";
 import emailjs from "@emailjs/browser";
 import { db, ref, push, onValue, update, remove, auth, googleProvider, signInWithPopup, signOut, onAuthStateChanged } from "./firebase";
@@ -3859,6 +3860,7 @@ export default function App() {
   const [showRecherche, setShowRecherche] = useState(false);
   const [showYukon, setShowYukon] = useState(false);
   const [showRH, setShowRH] = useState(false);
+  const [showEtiquettes, setShowEtiquettes] = useState(false);
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem("moorea-dark") === "1");
   const [popupEtiquette, setPopupEtiquette] = useState<any>(null);
   const [showStock, setShowStock] = useState(false);
@@ -5500,6 +5502,10 @@ _PDF joint_`;
     );
   }
 
+  if (showEtiquettes) {
+    return <EtiquettesModule onClose={() => { setShowEtiquettes(false); setShowAccueil(true); }} />;
+  }
+
   if (showRH) {
     return <>{fabScanner}<RHApp onClose={() => { setShowRH(false); setShowAccueil(true); }} /></>;
   }
@@ -5536,6 +5542,7 @@ _PDF joint_`;
       { icon: "📦", label: "Compter le stock", sub: "Inventaire GMS & Prestige avec écarts", color: "#0891b2", badge: null, action: () => { setShowAccueil(false); setShowStock(true); setStockTeam(null); setStockFilter(""); setStockEcartFilter("tous"); } },
       { icon: "🌿", label: "Besoins Yukon", sub: "Calculer les commandes mini légumes Afrique du Sud", color: "#16a34a", badge: null, action: () => { setShowAccueil(false); setShowYukon(true); } },
       { icon: "👥", label: "RH · Pointeuse", sub: "Analyse des temps de présence et heures sup", color: "#0ea5e9", badge: null, action: () => { setShowAccueil(false); setShowRH(true); } },
+      { icon: "🏷️", label: "Leofresh · Étiquettes", sub: "Générer les étiquettes bilingues pour l'export", color: "#f59e0b", badge: null, action: () => { setShowAccueil(false); setShowEtiquettes(true); } },
     ];
 
     return (
