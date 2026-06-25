@@ -2802,6 +2802,74 @@ function RHApp({ onClose }: { onClose: () => void }) {
     }
   };
 
+  const genererPDFGlobal = () => {
+    const w = window.open("", "_blank");
+    if (!w) return;
+    const sorted = [...employes].sort((a, b) => a.nom.localeCompare(b.nom));
+
+    const rows = sorted.map((emp, idx) => {
+      const nbAbsences = emp.jours.filter((j: any) => !j.travaille || j.travaille === "00:00").length;
+      const balColor = emp.totalBalance < 0 ? "#dc2626" : emp.totalBalance > 0 ? "#16a34a" : "#374151";
+      const rowBg = idx % 2 === 0 ? "#fff" : "#f9fafb";
+      return `<tr style="background:${rowBg}">
+        <td style="padding:8px 12px;font-weight:700;font-size:13px;border-bottom:1px solid #f0f0f0">${emp.nom}</td>
+        <td style="padding:8px 10px;font-size:12px;color:#6b7280;border-bottom:1px solid #f0f0f0">${emp.dept || "—"}</td>
+        <td style="padding:8px 10px;text-align:center;font-size:12px;color:#6b7280;border-bottom:1px solid #f0f0f0">${fmtMins(emp.totalPlanifie)}</td>
+        <td style="padding:8px 10px;text-align:center;font-size:12px;font-weight:600;border-bottom:1px solid #f0f0f0">${fmtMins(emp.totalTravaille)}</td>
+        <td style="padding:8px 10px;text-align:center;font-size:14px;font-weight:800;color:${balColor};border-bottom:1px solid #f0f0f0">${fmtMins(emp.totalBalance)}</td>
+        <td style="padding:8px 10px;text-align:center;font-size:13px;border-bottom:1px solid #f0f0f0">${nbAbsences > 0 ? `<span style="background:#fee2e2;color:#dc2626;padding:2px 10px;border-radius:6px;font-weight:700">${nbAbsences}j</span>` : '<span style="color:#16a34a;font-weight:700">✓</span>'}</td>
+      </tr>`;
+    }).join("");
+
+    const totalPlan = employes.reduce((s, e) => s + e.totalPlanifie, 0);
+    const totalTrav = employes.reduce((s, e) => s + e.totalTravaille, 0);
+    const totalBal = employes.reduce((s, e) => s + e.totalBalance, 0);
+    const totalAbs = employes.reduce((s, e) => s + e.jours.filter((j: any) => !j.travaille || j.travaille === "00:00").length, 0);
+    const nbRetard = employes.filter(e => e.totalBalance < 0).length;
+
+    w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Récap RH Moorea</title><style>
+      *{margin:0;padding:0;box-sizing:border-box}
+      body{font-family:Arial,sans-serif;color:#111;padding:20px}
+      @page{size:A4 landscape;margin:8mm}
+      @media print{.no-print{display:none}body{padding:0}}
+      table{width:100%;border-collapse:collapse}
+      th{background:#1a2e1a;color:#fff;padding:9px 10px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.5px}
+      th.center{text-align:center}
+    </style></head><body>
+    <div class="no-print" style="position:fixed;top:10px;right:10px;display:flex;gap:8px">
+      <button onclick="window.print()" style="padding:8px 16px;background:#0ea5e9;color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:700">🖨 Imprimer</button>
+      <button onclick="window.close()" style="padding:8px 16px;background:#f0f0f0;border:none;border-radius:8px;cursor:pointer">✕</button>
+    </div>
+
+    <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:16px;padding-bottom:12px;border-bottom:3px solid #0ea5e9">
+      <div>
+        <h1 style="font-size:20px;font-weight:900;margin-bottom:3px">MOOREA · Récap RH</h1>
+        <p style="font-size:12px;color:#6b7280">Période : ${periode} · ${employes.length} employés · Imprimé le ${new Date().toLocaleString("fr-FR")}</p>
+      </div>
+      <div style="display:flex;gap:16px;text-align:center">
+        <div><div style="font-size:20px;font-weight:800;color:#374151">${fmtMins(totalPlan)}</div><div style="font-size:10px;color:#9ca3af">PLANIFIÉ</div></div>
+        <div><div style="font-size:20px;font-weight:800;color:#0ea5e9">${fmtMins(totalTrav)}</div><div style="font-size:10px;color:#9ca3af">TRAVAILLÉ</div></div>
+        <div><div style="font-size:20px;font-weight:800;color:${totalBal < 0 ? "#dc2626" : "#16a34a"}">${fmtMins(totalBal)}</div><div style="font-size:10px;color:#9ca3af">BALANCE</div></div>
+        <div><div style="font-size:20px;font-weight:800;color:#dc2626">${nbRetard}</div><div style="font-size:10px;color:#9ca3af">EN RETARD</div></div>
+        <div><div style="font-size:20px;font-weight:800;color:#dc2626">${totalAbs}</div><div style="font-size:10px;color:#9ca3af">J. ABSENCES</div></div>
+      </div>
+    </div>
+
+    <table>
+      <thead><tr>
+        <th>Employé</th>
+        <th>Département</th>
+        <th class="center">Planifié</th>
+        <th class="center">Travaillé</th>
+        <th class="center">Balance</th>
+        <th class="center">Absences</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    </body></html>`);
+    w.document.close();
+  };
+
   const genererPDF = (emp: any) => {
     const w = window.open("", "_blank");
     if (!w) return;
@@ -2989,14 +3057,20 @@ function RHApp({ onClose }: { onClose: () => void }) {
               </div>
             )}
 
-            {/* Tri */}
-            <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-              {[["balance", "⏱ Balance"], ["sup", "📈 Heures sup"], ["nom", "🔤 Nom"]].map(([k, l]) => (
-                <button key={k} onClick={() => setSortBy(k as any)}
-                  style={{ padding: "6px 14px", borderRadius: 20, border: `1.5px solid ${sortBy === k ? "#0ea5e9" : "#e8e0d0"}`, background: sortBy === k ? "#f5f3ff" : "#fff", cursor: "pointer", fontSize: 12, fontWeight: 700, color: sortBy === k ? "#0ea5e9" : "#9ca3af" }}>
-                  {l}
-                </button>
-              ))}
+            {/* Tri + PDF global */}
+            <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ display: "flex", gap: 8 }}>
+                {[["balance", "⏱ Balance"], ["sup", "📈 H.Sup"], ["nom", "🔤 Nom"]].map(([k, l]) => (
+                  <button key={k} onClick={() => setSortBy(k as any)}
+                    style={{ padding: "6px 14px", borderRadius: 20, border: `1.5px solid ${sortBy === k ? "#0ea5e9" : "#e8e0d0"}`, background: sortBy === k ? "#f0f9ff" : "#fff", cursor: "pointer", fontSize: 12, fontWeight: 700, color: sortBy === k ? "#0ea5e9" : "#9ca3af" }}>
+                    {l}
+                  </button>
+                ))}
+              </div>
+              <button onClick={genererPDFGlobal}
+                style={{ padding: "8px 16px", borderRadius: 10, border: "none", background: "#0ea5e9", color: "#fff", cursor: "pointer", fontSize: 13, fontWeight: 700 }}>
+                📄 PDF Récap global
+              </button>
             </div>
 
             {/* Tableau employés */}
