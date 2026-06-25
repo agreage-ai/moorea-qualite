@@ -2978,6 +2978,8 @@ function RHApp({ onClose }: { onClose: () => void }) {
     </body></html>`);
     w.document.close();
   };
+
+  if (!unlocked) {
     return (
       <div style={{ minHeight: "100vh", background: "#0a0a0a", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 24 }}>
         <PageHeader titre="👥 RH · Pointeuse" couleur="#0ea5e9" onBack={onClose} />
