@@ -3215,16 +3215,8 @@ async function etqParseDocx(file: File): Promise<Record<string, string>> {
     const reader = new FileReader();
     reader.onload = async (e) => {
       try {
-        let JSZip = (window as any).JSZip;
-        if (!JSZip) {
-          await new Promise<void>((res, rej) => {
-            const s = document.createElement("script");
-            s.src = "https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js";
-            s.onload = () => res(); s.onerror = () => rej();
-            document.head.appendChild(s);
-          });
-          JSZip = (window as any).JSZip;
-        }
+        const JSZip = (window as any).JSZip;
+        if (!JSZip) { resolve({ ...ETQ_DEFAUT }); return; }
         const zip = await JSZip.loadAsync(e.target?.result);
         const xmlFile = zip.file("word/document.xml");
         if (!xmlFile) { resolve({ ...ETQ_DEFAUT }); return; }
@@ -3338,7 +3330,18 @@ function EtiquettesModule({ onClose }: { onClose: () => void }) {
   const [lotVars, setLotVars] = useState<Record<string, Record<string, string>>>({});
   const [printHTML, setPrintHTML] = useState<string | null>(null);
 
-  useEffect(() => { fetchP(); }, []);
+  const [jsZipReady, setJsZipReady] = useState(!!(window as any).JSZip);
+
+  useEffect(() => {
+    fetchP();
+    // Précharger JSZip dès l'ouverture
+    if (!(window as any).JSZip) {
+      const s = document.createElement("script");
+      s.src = "https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js";
+      s.onload = () => setJsZipReady(true);
+      document.head.appendChild(s);
+    }
+  }, []);
 
   async function fetchP() {
     setLoading(true);
@@ -3349,17 +3352,25 @@ function EtiquettesModule({ onClose }: { onClose: () => void }) {
 
   async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files || []); if (!files.length) return;
-    setImporting(true); let ok = 0;
-    for (let i = 0; i < files.length; i++) {
-      setImportProg({ current: i + 1, total: files.length });
-      try { const p = await etqParseDocx(files[i]); await addDoc(collection(fsDb, "etiquettes_produits"), { ...ETQ_DEFAUT, ...p }); ok++; }
-      catch (err) { console.error("import err", err); }
+    setImporting(true);
+    setImportProg({ current: 0, total: files.length });
+    try {
+      // Traiter tous les fichiers en parallèle
+      const results = await Promise.all(files.map(f => etqParseDocx(f)));
+      // Sauvegarder en parallèle dans Firebase
+      await Promise.all(results.map(p => addDoc(collection(fsDb, "etiquettes_produits"), { ...ETQ_DEFAUT, ...p })));
+      await fetchP();
+      setImporting(false); setImportProg(null); e.target.value = "";
+      if (files.length === 1) {
+        const s = await getDocs(collection(fsDb, "etiquettes_produits"));
+        const docs = s.docs; if (docs.length) { const last = docs[docs.length - 1]; setForm({ ...ETQ_DEFAUT, ...last.data() } as any); setSelected({ id: last.id, ...last.data() }); setVue("creer"); }
+      } else {
+        alert(`✅ ${results.length} étiquette${results.length > 1 ? "s" : ""} importée${results.length > 1 ? "s" : ""}`);
+      }
+    } catch (err: any) {
+      alert("Erreur import: " + err.message);
+      setImporting(false); setImportProg(null);
     }
-    await fetchP(); setImporting(false); setImportProg(null); e.target.value = "";
-    if (files.length === 1) {
-      const s = await getDocs(collection(fsDb, "etiquettes_produits"));
-      const docs = s.docs; if (docs.length) { const last = docs[docs.length - 1]; setForm({ ...ETQ_DEFAUT, ...last.data() } as any); setSelected({ id: last.id, ...last.data() }); setVue("creer"); }
-    } else alert(`✅ ${ok} étiquette${ok > 1 ? "s" : ""} importée${ok > 1 ? "s" : ""}`);
   }
 
   async function sauvegarder() {
@@ -3421,9 +3432,9 @@ function EtiquettesModule({ onClose }: { onClose: () => void }) {
   if (vue === "liste") return (
     <div style={{ minHeight: "100vh", background: "#f5f3ee", fontFamily: "'Syne', sans-serif" }}>
       {topBar("🏷️ Leofresh · Étiquettes", <>
-        <label style={{ ...btn("#fef3c7", "#92400e"), cursor: importing ? "wait" : "pointer" }}>
-          {importProg ? `⏳ ${importProg.current}/${importProg.total}` : importing ? "⏳" : "📂 Importer .docx"}
-          <input type="file" accept=".docx" multiple style={{ display: "none" }} onChange={handleImport} />
+        <label style={{ ...btn("#fef3c7", "#92400e"), cursor: (!jsZipReady || importing) ? "wait" : "pointer", opacity: jsZipReady ? 1 : 0.6 }}>
+          {importProg ? `⏳ Import...` : importing ? "⏳" : jsZipReady ? "📂 Importer .docx" : "⏳ Chargement..."}
+          <input type="file" accept=".docx" multiple style={{ display: "none" }} onChange={handleImport} disabled={!jsZipReady} />
         </label>
         <button style={btn("#f59e0b", "#0a0a0a")} onClick={() => { setForm({ ...ETQ_DEFAUT }); setSelected(null); setVue("creer"); }}>+ Nouveau</button>
         {produits.length > 0 && <button style={btn("#16a34a")} onClick={ouvrirLot}>🖨️ Imprimer lot</button>}
