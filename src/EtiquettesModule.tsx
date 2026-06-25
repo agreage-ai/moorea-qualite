@@ -104,37 +104,9 @@ function etiquetteHTML(p: Record<string, string>): string {
   </div>`;
 }
 
-function imprimerEtiquettes(produits: Record<string, string>[]) {
-  const w = window.open("", "_blank");
-  if (!w) return;
-  const css = `
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: Arial, sans-serif; background: #fff; }
-    .etiquette { width: 11cm; min-height: 17.5cm; border: 1px solid #000; padding: 6mm; page-break-after: always; }
-    .etiquette:last-child { page-break-after: avoid; }
-    hr { border: none; border-top: 1px solid #000; margin: 3px 0; }
-    b { display: block; font-weight: bold; font-size: 11pt; line-height: 1.4; }
-    b.big { font-size: 14pt; }
-    b.med { font-size: 12pt; }
-    b.small { font-size: 9pt; }
-    b.rtl { direction: rtl; text-align: right; unicode-bidi: embed; }
-    .row-center { text-align: center; margin: 2px 0; }
-    .row-center b { display: inline; }
-    .row2 { display: flex; justify-content: space-between; align-items: center; margin: 2px 0; }
-    .row2 b { flex: 1; }
-    .row2 b.rtl { text-align: right; }
-    @page { size: 11cm 17.5cm; margin: 0; }
-    @media print { .no-print { display: none; } }
-  `;
-  const html = produits.map(p => etiquetteHTML(p)).join("\n");
-  w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Étiquettes Leofresh</title><style>${css}</style></head><body>
-    <div class="no-print" style="position:fixed;top:10px;right:10px;display:flex;gap:8px;z-index:999">
-      <button onclick="window.print()" style="padding:8px 18px;background:#f59e0b;color:#000;border:none;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer">🖨️ Imprimer</button>
-      <button onclick="window.close()" style="padding:8px 18px;background:#f0f0f0;border:none;border-radius:8px;cursor:pointer">✕ Fermer</button>
-    </div>
-    ${html}
-  </body></html>`);
-  w.document.close();
+function imprimerEtiquettes(produits: Record<string, string>[]): string {
+  const css = `*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,sans-serif}.etiquette{width:100%;border:1px solid #000;padding:6mm;page-break-after:always;margin-bottom:10px}.etiquette:last-child{page-break-after:avoid;margin-bottom:0}hr{border:none;border-top:1px solid #000;margin:3px 0}b{display:block;font-weight:bold;font-size:11pt;line-height:1.4}b.big{font-size:14pt}b.med{font-size:12pt}b.small{font-size:9pt}b.rtl{direction:rtl;text-align:right;unicode-bidi:embed}.row-center{text-align:center;margin:2px 0}.row-center b{display:inline}.row2{display:flex;justify-content:space-between;align-items:center;margin:2px 0}.row2 b{flex:1}.row2 b.rtl{text-align:right}@page{size:11cm 17.5cm;margin:0}@media print{.no-print{display:none!important}}`;
+  return `<style>${css}</style>` + produits.map(p => etiquetteHTML(p)).join("\n");
 }
 
 async function parseDocx(file: File): Promise<Record<string, string>> {
@@ -189,6 +161,7 @@ export default function EtiquettesModule({ onClose }: { onClose: () => void }) {
   const [search, setSearch] = useState("");
   const [lotSelects, setLotSelects] = useState<Record<string, boolean>>({});
   const [lotVars, setLotVars] = useState<Record<string, Record<string, string>>>({});
+  const [printHTML, setPrintHTML] = useState<string | null>(null);
 
   useEffect(() => { fetchProduits(); }, []);
 
@@ -256,8 +229,8 @@ export default function EtiquettesModule({ onClose }: { onClose: () => void }) {
     const selection = produits.filter(p => lotSelects[p.id]);
     if (!selection.length) { alert("Sélectionne au moins une étiquette"); return; }
     const data = selection.map(p => ({ ...p, ...lotVars[p.id] }));
-    imprimerEtiquettes(data);
-    // Sauvegarder les vars en arrière-plan
+    const html = imprimerEtiquettes(data);
+    setPrintHTML(html);
     selection.forEach(p => { if (lotVars[p.id]) updateDoc(doc(db, "etiquettes_produits", p.id), lotVars[p.id]); });
   }
 
@@ -364,6 +337,20 @@ export default function EtiquettesModule({ onClose }: { onClose: () => void }) {
           </div>
         </div>
       </div>
+    </div>
+  );
+
+  // ── OVERLAY IMPRESSION ──
+  if (printHTML) return (
+    <div style={{ position: "fixed", inset: 0, background: "#f5f3ee", zIndex: 800, overflowY: "auto" }}>
+      <div className="no-print" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 20px", background: "#0a0a0a", position: "sticky", top: 0, zIndex: 1 }}>
+        <span style={{ color: "#f59e0b", fontWeight: 700, fontSize: 14 }}>🏷️ Étiquettes Leofresh</span>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={() => window.print()} style={{ background: "#f59e0b", color: "#000", border: "none", borderRadius: 8, padding: "8px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>🖨️ Imprimer</button>
+          <button onClick={() => setPrintHTML(null)} style={{ background: "rgba(255,255,255,.15)", color: "#fff", border: "none", borderRadius: 8, padding: "8px 14px", fontSize: 13, cursor: "pointer" }}>✕ Fermer</button>
+        </div>
+      </div>
+      <div style={{ maxWidth: "11cm", margin: "20px auto", padding: "0 10px 40px" }} dangerouslySetInnerHTML={{ __html: printHTML }} />
     </div>
   );
 
