@@ -7,8 +7,8 @@ const firebaseConfig = {
   authDomain: "moorea-qualite.firebaseapp.com",
   projectId: "moorea-qualite",
   storageBucket: "moorea-qualite.appspot.com",
-  messagingSenderId: "254920745129",
-  appId: "1:254920745129:web:fa14e2d3b53a8e6b9c9f5a"
+  messagingSenderId: "639598259840",
+  appId: "1:639598259840:web:ff3c048f9aac1b99f40065"
 };
 const app2 = getApps().find((a: any) => a.name === "moorea-etiquettes") || initializeApp(firebaseConfig, "moorea-etiquettes");
 const db = getFirestore(app2);
