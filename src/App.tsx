@@ -3844,6 +3844,156 @@ const STOCK_ARTICLES_LIST: Array<{article: string, equipe: string}> = [
       ];
 
 // ─── RETOURS CLIENTS ───
+
+// ModalSaisiePrevu — composant indépendant, pas de state partagé avec le parent
+function ModalSaisiePrevu({ onClose, onSubmit }: { onClose: () => void; onSubmit: (data: any) => void }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [nbRows, setNbRows] = useState(1);
+  const inp: React.CSSProperties = { padding: "10px 12px", border: "1.5px solid #e8e0d0", borderRadius: 10, background: "#fff", fontSize: 13, outline: "none", width: "100%" };
+  const lbl: React.CSSProperties = { fontSize: 11, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".5px", display: "block", marginBottom: 5 };
+
+  function handleSubmit() {
+    if (!containerRef.current) return;
+    const g = (id: string) => (containerRef.current!.querySelector(`#mp-${id}`) as HTMLInputElement)?.value?.trim() || "";
+    const rows = containerRef.current.querySelectorAll(".prod-row-mp");
+    const products = Array.from(rows).map(row => ({
+      nom: (row.querySelector('[data-f="nom"]') as HTMLInputElement)?.value?.trim() || "",
+      lot: (row.querySelector('[data-f="lot"]') as HTMLInputElement)?.value?.trim() || "",
+      origine: (row.querySelector('[data-f="ori"]') as HTMLInputElement)?.value?.trim() || "",
+      qteAttendue: (row.querySelector('[data-f="att"]') as HTMLInputElement)?.value?.trim() || "",
+      qteRecue: (row.querySelector('[data-f="rec"]') as HTMLInputElement)?.value?.trim() || "",
+      motif: (row.querySelector('[data-f="mot"]') as HTMLSelectElement)?.value || "",
+    })).filter(r => r.nom);
+    if (!g("client") || !g("bl") || !products.length) { alert("Client, BL et au moins un produit requis."); return; }
+    onSubmit({ client: g("client"), bl: g("bl"), transporteur: g("tra"), dateLiv: g("dat"), commercial: g("com"), comment: g("cmt"), products });
+  }
+
+  const rowStyle: React.CSSProperties = { display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr 2fr 28px", gap: 5, marginBottom: 5, alignItems: "center" };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.55)", zIndex: 500, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "16px", overflowY: "auto" }} onClick={onClose}>
+      <div ref={containerRef} style={{ background: "#fff", borderRadius: 20, padding: 24, maxWidth: 720, width: "100%", marginTop: 20 }} onClick={e => e.stopPropagation()}>
+        <p style={{ fontSize: 15, fontWeight: 700, marginBottom: 14 }}>📋 Nouveau retour prévu</p>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+          <div><label style={lbl}>Client</label><input id="mp-client" style={inp} placeholder="ex : Carrefour Billy" /></div>
+          <div><label style={lbl}>N° BL</label><input id="mp-bl" style={inp} type="number" /></div>
+          <div><label style={lbl}>Transporteur</label><input id="mp-tra" style={inp} /></div>
+          <div><label style={lbl}>Date livraison</label><input id="mp-dat" style={inp} type="date" /></div>
+        </div>
+        <div style={{ marginBottom: 14 }}><label style={lbl}>Saisi par</label><input id="mp-com" style={inp} /></div>
+        <p style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase", marginBottom: 6 }}>Produits</p>
+        <div style={{ fontSize: 11, color: "#9ca3af", display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr 2fr 28px", gap: 5, marginBottom: 4, padding: "0 2px" }}>
+          <span>Produit</span><span>Lot</span><span>Origine</span><span>Att.</span><span>Reçu</span><span>Motif</span><span></span>
+        </div>
+        <div id="mp-rows">
+          {Array.from({ length: nbRows }).map((_, i) => (
+            <div key={i} className="prod-row-mp" style={rowStyle}>
+              <input style={inp} data-f="nom" list="produits-stock-list" placeholder="Produit" autoComplete="off" />
+              <input style={inp} data-f="lot" placeholder="Lot" />
+              <input style={inp} data-f="ori" placeholder="Origine" />
+              <input style={{ ...inp, textAlign: "center" }} data-f="att" type="number" placeholder="Att." />
+              <input style={{ ...inp, textAlign: "center" }} data-f="rec" type="number" placeholder="Reçu" />
+              <select style={inp} data-f="mot">
+                <option value="">-- Motif --</option>
+                {MOTIFS_RETOUR.map(m => <option key={m} value={m}>{m}</option>)}
+              </select>
+              {nbRows > 1 && <button type="button" onClick={() => setNbRows(n => n - 1)} style={{ background: "transparent", border: "none", color: "#ccc", cursor: "pointer", fontSize: 16 }}>🗑</button>}
+            </div>
+          ))}
+        </div>
+        <button type="button" onClick={() => setNbRows(n => n + 1)} style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", border: "1.5px dashed #c8a84b", borderRadius: 10, background: "transparent", cursor: "pointer", fontSize: 13, color: "#c8a84b", margin: "8px 0 14px" }}>+ Ajouter un produit</button>
+        <div><label style={lbl}>Commentaires</label><textarea id="mp-cmt" style={{ ...inp, minHeight: 55, resize: "vertical" }} /></div>
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 16 }}>
+          <button style={{ padding: "10px 18px", borderRadius: 10, border: "1.5px solid #e8e0d0", background: "transparent", cursor: "pointer", fontSize: 13 }} onClick={onClose}>Annuler</button>
+          <button style={{ padding: "10px 18px", borderRadius: 10, border: "none", background: "#c8a84b", color: "#0a0a0a", cursor: "pointer", fontSize: 13, fontWeight: 700 }} onClick={handleSubmit}>📤 Enregistrer</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ModalSaisieInattendu — même principe
+function ModalSaisieInattendu({ onClose, onSubmit }: { onClose: () => void; onSubmit: (data: any) => void }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [nbRows, setNbRows] = useState(1);
+  const inp: React.CSSProperties = { padding: "10px 12px", border: "1.5px solid #e8e0d0", borderRadius: 10, background: "#fff", fontSize: 13, outline: "none", width: "100%" };
+  const lbl: React.CSSProperties = { fontSize: 11, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".5px", display: "block", marginBottom: 5 };
+
+  function handleSubmit() {
+    if (!containerRef.current) return;
+    const g = (id: string) => (containerRef.current!.querySelector(`#mi-${id}`) as HTMLInputElement)?.value?.trim() || "";
+    const rows = containerRef.current.querySelectorAll(".prod-row-mi");
+    const products = Array.from(rows).map(row => {
+      const decAcc = (row.querySelector('[data-f="da"]') as HTMLButtonElement)?.dataset?.on === "1";
+      const decDes = (row.querySelector('[data-f="dd"]') as HTMLButtonElement)?.dataset?.on === "1";
+      return {
+        nom: (row.querySelector('[data-f="nom"]') as HTMLInputElement)?.value?.trim() || "",
+        lot: (row.querySelector('[data-f="lot"]') as HTMLInputElement)?.value?.trim() || "",
+        origine: (row.querySelector('[data-f="ori"]') as HTMLInputElement)?.value?.trim() || "",
+        qteAttendue: "", qteRecue: (row.querySelector('[data-f="qte"]') as HTMLInputElement)?.value?.trim() || "",
+        motif: (row.querySelector('[data-f="mot"]') as HTMLSelectElement)?.value || "",
+        decisionArticle: decAcc ? "accepte" : decDes ? "destruction" : null,
+      };
+    }).filter(r => r.nom);
+    if (!g("agent") || !products.length) { alert("Reçu par et au moins un article requis."); return; }
+    onSubmit({ agent: g("agent"), dateLiv: g("dat"), clientConnu: g("cli") || null, transporteurConnu: g("tra") || null, comment: g("cmt"), products });
+  }
+
+  function toggleDec(e: React.MouseEvent<HTMLButtonElement>, self: string, other: string) {
+    const btn = e.currentTarget;
+    const isOn = btn.dataset.on === "1";
+    btn.dataset.on = isOn ? "0" : "1";
+    btn.style.background = !isOn ? (self === "da" ? "#dcfce7" : "#fee2e2") : "transparent";
+    btn.style.borderColor = !isOn ? (self === "da" ? "#15803d" : "#dc2626") : (self === "da" ? "#bbf7d0" : "#fecaca");
+    const row = btn.closest(".prod-row-mi");
+    const otherBtn = row?.querySelector(`[data-f="${other}"]`) as HTMLButtonElement;
+    if (otherBtn) { otherBtn.dataset.on = "0"; otherBtn.style.background = "transparent"; otherBtn.style.borderColor = other === "da" ? "#bbf7d0" : "#fecaca"; }
+  }
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.55)", zIndex: 500, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "16px", overflowY: "auto" }} onClick={onClose}>
+      <div ref={containerRef} style={{ background: "#fff", borderRadius: 20, padding: 24, maxWidth: 720, width: "100%", marginTop: 20 }} onClick={e => e.stopPropagation()}>
+        <p style={{ fontSize: 15, fontWeight: 700, marginBottom: 10 }}>🏭 Retour inattendu</p>
+        <div style={{ background: "#fffbf0", border: "1.5px solid rgba(200,168,75,.3)", borderRadius: 10, padding: "10px 14px", fontSize: 12, color: "#92600a", marginBottom: 14 }}>Colis reçu sans déclaration — apparaîtra dans <strong>À rattacher</strong>.</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+          <div><label style={lbl}>Reçu par</label><input id="mi-agent" style={inp} /></div>
+          <div><label style={lbl}>Date réception</label><input id="mi-dat" style={inp} type="date" defaultValue={new Date().toISOString().split("T")[0]} /></div>
+          <div><label style={lbl}>Client (optionnel)</label><input id="mi-cli" style={inp} /></div>
+          <div><label style={lbl}>Transporteur (optionnel)</label><input id="mi-tra" style={inp} /></div>
+        </div>
+        <p style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase", marginBottom: 6 }}>Articles reçus</p>
+        <div style={{ fontSize: 11, color: "#9ca3af", display: "grid", gridTemplateColumns: "2fr 1fr 1fr 0.8fr 1.6fr 80px 28px", gap: 5, marginBottom: 4, padding: "0 2px" }}>
+          <span>Article</span><span>Lot</span><span>Origine</span><span>Qté</span><span>État</span><span>Décision</span><span></span>
+        </div>
+        <div id="mi-rows">
+          {Array.from({ length: nbRows }).map((_, i) => (
+            <div key={i} className="prod-row-mi" style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 0.8fr 1.6fr 80px 28px", gap: 5, marginBottom: 5, alignItems: "center" }}>
+              <input style={inp} data-f="nom" list="produits-stock-list" placeholder="Article" autoComplete="off" />
+              <input style={inp} data-f="lot" placeholder="Lot" />
+              <input style={inp} data-f="ori" placeholder="Origine" />
+              <input style={{ ...inp, textAlign: "center" }} data-f="qte" type="number" placeholder="Qté" />
+              <select style={inp} data-f="mot">
+                <option value="">-- État --</option>
+                {ETATS_ENTREPOT.map(m => <option key={m} value={m}>{m}</option>)}
+              </select>
+              <div style={{ display: "flex", gap: 3 }}>
+                <button type="button" data-f="da" data-on="0" onClick={e => toggleDec(e, "da", "dd")} style={{ padding: "5px 8px", borderRadius: 6, border: "1.5px solid #bbf7d0", background: "transparent", color: "#15803d", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>✓ Stock</button>
+                <button type="button" data-f="dd" data-on="0" onClick={e => toggleDec(e, "dd", "da")} style={{ padding: "5px 8px", borderRadius: 6, border: "1.5px solid #fecaca", background: "transparent", color: "#dc2626", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>✗ Destr</button>
+              </div>
+              {nbRows > 1 && <button type="button" onClick={() => setNbRows(n => n - 1)} style={{ background: "transparent", border: "none", color: "#ccc", cursor: "pointer", fontSize: 16 }}>🗑</button>}
+            </div>
+          ))}
+        </div>
+        <button type="button" onClick={() => setNbRows(n => n + 1)} style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", border: "1.5px dashed #c8a84b", borderRadius: 10, background: "transparent", cursor: "pointer", fontSize: 13, color: "#c8a84b", margin: "8px 0 14px" }}>+ Ajouter</button>
+        <div><label style={lbl}>Commentaires</label><textarea id="mi-cmt" style={{ ...inp, minHeight: 55, resize: "vertical" }} /></div>
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 16 }}>
+          <button style={{ padding: "10px 18px", borderRadius: 10, border: "1.5px solid #e8e0d0", background: "transparent", cursor: "pointer", fontSize: 13 }} onClick={onClose}>Annuler</button>
+          <button style={{ padding: "10px 18px", borderRadius: 10, border: "none", background: "#c8a84b", color: "#0a0a0a", cursor: "pointer", fontSize: 13, fontWeight: 700 }} onClick={handleSubmit}>📤 Envoyer</button>
+        </div>
+      </div>
+    </div>
+  );
+}
 const RETOURS_CFG = {
   apiKey: "AIzaSyAR0BdIsWrA7UDKfCFSANbqxDrIsqLq6BA",
   authDomain: "moorea-retours.firebaseapp.com",
@@ -3855,36 +4005,54 @@ const _retoursApp = getApps2().find((a: any) => a.name === "moorea-retours") ?? 
 // On réutilise getDatabase2 déjà importé pour qrTracker — même fonction, app différente
 const dbRetours = getDatabase2(_retoursApp);
 
-// ProdRow — PAS de useState interne, utilise datalist HTML natif
-function ProdRow({ p, i, arr, set, mode, listId }: any) {
-  const inp: React.CSSProperties = { padding: "10px 13px", border: "1.5px solid #e8e0d0", borderRadius: 10, background: "#fff", fontSize: 13, outline: "none", width: "100%" };
+// ProdRow — inputs NON CONTRÔLÉS (defaultValue) — zéro re-render, focus conservé
+function ProdRow({ p, i, mode, onRemove, canRemove, listId }: any) {
+  const s: React.CSSProperties = { padding: "10px 10px", border: "1.5px solid #e8e0d0", borderRadius: 10, background: "#fff", fontSize: 13, outline: "none", width: "100%" };
   return (
-    <div style={{ display: "grid", gridTemplateColumns: mode === "prevu" ? "2fr 1fr 1fr 1.4fr 2fr 28px" : "2fr 1fr 1fr 0.8fr 1.4fr 1.6fr 28px", gap: 6, marginBottom: 6, alignItems: "center" }}>
-      <input style={inp} list={listId} placeholder={mode === "prevu" ? "Produit" : "Description"} value={p.nom} onChange={e => set(arr.map((x: any, j: number) => j === i ? { ...x, nom: e.target.value } : x))} autoComplete="off" />
-      <input style={inp} placeholder="Lot" type="number" value={p.lot} onChange={e => set(arr.map((x: any, j: number) => j === i ? { ...x, lot: e.target.value } : x))} />
-      <input style={inp} placeholder="Origine" value={p.origine} onChange={e => set(arr.map((x: any, j: number) => j === i ? { ...x, origine: e.target.value } : x))} />
+    <div className="prod-row" style={{ display: "grid", gridTemplateColumns: mode === "prevu" ? "2fr 1fr 1fr 1.4fr 2fr 28px" : "2fr 1fr 1fr 0.8fr 1.4fr 1.6fr 28px", gap: 6, marginBottom: 6, alignItems: "center" }}>
+      <input style={s} list={listId} name="nom" placeholder={mode === "prevu" ? "Produit" : "Description"} defaultValue={p.nom} autoComplete="off" />
+      <input style={s} name="lot" type="text" placeholder="Lot" defaultValue={p.lot} />
+      <input style={s} name="origine" placeholder="Origine" defaultValue={p.origine} />
       {mode === "prevu" ? (
         <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
-          <input style={{ ...inp, width: 52, textAlign: "center", padding: "8px 4px" }} type="number" placeholder="Att." value={p.qteAttendue} onChange={e => set(arr.map((x: any, j: number) => j === i ? { ...x, qteAttendue: e.target.value } : x))} />
+          <input style={{ ...s, width: 52, textAlign: "center", padding: "8px 4px" }} name="qteAttendue" type="number" placeholder="Att." defaultValue={p.qteAttendue} />
           <span style={{ color: "#bbb" }}>/</span>
-          <input style={{ ...inp, width: 52, textAlign: "center", padding: "8px 4px" }} type="number" placeholder="Reçu" value={p.qteRecue} onChange={e => set(arr.map((x: any, j: number) => j === i ? { ...x, qteRecue: e.target.value } : x))} />
+          <input style={{ ...s, width: 52, textAlign: "center", padding: "8px 4px" }} name="qteRecue" type="number" placeholder="Reçu" defaultValue={p.qteRecue} />
         </div>
       ) : (
-        <input style={{ ...inp, textAlign: "center" }} type="number" placeholder="Qté" value={p.qteRecue} onChange={e => set(arr.map((x: any, j: number) => j === i ? { ...x, qteRecue: e.target.value } : x))} />
+        <input style={{ ...s, textAlign: "center" }} name="qteRecue" type="number" placeholder="Qté" defaultValue={p.qteRecue} />
       )}
-      <select style={inp} value={p.motif} onChange={e => set(arr.map((x: any, j: number) => j === i ? { ...x, motif: e.target.value } : x))}>
+      <select style={s} name="motif" defaultValue={p.motif}>
         <option value="">-- {mode === "prevu" ? "Motif" : "État"} --</option>
-        {(mode === "prevu" ? MOTIFS_RETOUR : ETATS_ENTREPOT).map((m: string) => <option key={m}>{m}</option>)}
+        {(mode === "prevu" ? MOTIFS_RETOUR : ETATS_ENTREPOT).map((m: string) => <option key={m} value={m}>{m}</option>)}
       </select>
       {mode === "entrepot" && (
         <div style={{ display: "flex", gap: 3 }}>
-          <button onClick={() => set(arr.map((x: any, j: number) => j === i ? { ...x, decisionArticle: x.decisionArticle === "accepte" ? null : "accepte" } : x))} style={{ padding: "5px 7px", borderRadius: 6, border: `1.5px solid ${p.decisionArticle === "accepte" ? "#15803d" : "#bbf7d0"}`, background: p.decisionArticle === "accepte" ? "#dcfce7" : "transparent", color: "#15803d", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>✓</button>
-          <button onClick={() => set(arr.map((x: any, j: number) => j === i ? { ...x, decisionArticle: x.decisionArticle === "destruction" ? null : "destruction" } : x))} style={{ padding: "5px 7px", borderRadius: 6, border: `1.5px solid ${p.decisionArticle === "destruction" ? "#dc2626" : "#fecaca"}`, background: p.decisionArticle === "destruction" ? "#fee2e2" : "transparent", color: "#dc2626", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>✗</button>
+          <button type="button" name="dec-accepte" style={{ padding: "5px 7px", borderRadius: 6, border: "1.5px solid #bbf7d0", background: p.decisionArticle === "accepte" ? "#dcfce7" : "transparent", color: "#15803d", fontSize: 11, fontWeight: 600, cursor: "pointer" }}
+            onClick={e => { const b = e.currentTarget; b.dataset.active = b.dataset.active === "1" ? "0" : "1"; b.style.background = b.dataset.active === "1" ? "#dcfce7" : "transparent"; b.style.borderColor = b.dataset.active === "1" ? "#15803d" : "#bbf7d0"; const b2 = b.nextElementSibling as HTMLButtonElement; if (b2) { b2.dataset.active = "0"; b2.style.background = "transparent"; b2.style.borderColor = "#fecaca"; } }} data-active={p.decisionArticle === "accepte" ? "1" : "0"}>✓</button>
+          <button type="button" name="dec-destruction" style={{ padding: "5px 7px", borderRadius: 6, border: "1.5px solid #fecaca", background: p.decisionArticle === "destruction" ? "#fee2e2" : "transparent", color: "#dc2626", fontSize: 11, fontWeight: 600, cursor: "pointer" }}
+            onClick={e => { const b = e.currentTarget; b.dataset.active = b.dataset.active === "1" ? "0" : "1"; b.style.background = b.dataset.active === "1" ? "#fee2e2" : "transparent"; b.style.borderColor = b.dataset.active === "1" ? "#dc2626" : "#fecaca"; const b2 = b.previousElementSibling as HTMLButtonElement; if (b2) { b2.dataset.active = "0"; b2.style.background = "transparent"; b2.style.borderColor = "#bbf7d0"; } }} data-active={p.decisionArticle === "destruction" ? "1" : "0"}>✗</button>
         </div>
       )}
-      <button onClick={() => arr.length > 1 && set(arr.filter((_: any, j: number) => j !== i))} style={{ background: "transparent", border: "none", color: "#ccc", cursor: "pointer", padding: 4, fontSize: 16 }}>🗑</button>
+      {canRemove && <button type="button" onClick={onRemove} style={{ background: "transparent", border: "none", color: "#ccc", cursor: "pointer", padding: 4, fontSize: 16 }}>🗑</button>}
     </div>
   );
+}
+
+// Lit les valeurs des prod-rows depuis le DOM
+function readProdRows(container: HTMLElement, mode: string): any[] {
+  const rows = container.querySelectorAll(".prod-row");
+  return Array.from(rows).map(row => {
+    const g = (name: string) => (row.querySelector(`[name="${name}"]`) as HTMLInputElement)?.value?.trim() || "";
+    const decAcc = (row.querySelector('[name="dec-accepte"]') as HTMLButtonElement)?.dataset?.active === "1";
+    const decDes = (row.querySelector('[name="dec-destruction"]') as HTMLButtonElement)?.dataset?.active === "1";
+    return {
+      nom: g("nom"), lot: g("lot"), origine: g("origine"),
+      qteAttendue: mode === "prevu" ? g("qteAttendue") : "",
+      qteRecue: g("qteRecue"), motif: g("motif"),
+      decisionArticle: mode === "entrepot" ? (decAcc ? "accepte" : decDes ? "destruction" : null) : null,
+    };
+  }).filter(r => r.nom);
 }
 // Firebase moorea-qualite Realtime DB — paths: retours/, retours_entrepot/, retours_corbeille/, compteurs_retours
 
@@ -4247,44 +4415,22 @@ function RetoursClientsModule({ onClose }: { onClose: () => void }) {
       </Modal>}
 
       {/* MODAL RETOUR PRÉVU */}
-      {modalPrevu && <Modal onClose={() => setModalPrevu(false)}>
-        <p style={{ fontSize: 15, fontWeight: 700, marginBottom: 14 }}>📋 Nouveau retour prévu</p>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
-          <div><label style={lbl}>Client</label><input style={inp} value={fClient} onChange={e => setFClient(e.target.value)} placeholder="ex : Carrefour Billy" /></div>
-          <div><label style={lbl}>N° BL</label><input style={inp} type="number" value={fBl} onChange={e => setFBl(e.target.value)} /></div>
-          <div><label style={lbl}>Transporteur</label><input style={inp} value={fTransporteur} onChange={e => setFTransporteur(e.target.value)} /></div>
-          <div><label style={lbl}>Date livraison</label><input style={inp} type="date" value={fDateLiv} onChange={e => setFDateLiv(e.target.value)} /></div>
-        </div>
-        <div style={{ marginBottom: 14 }}><label style={lbl}>Saisi par</label><input style={inp} value={fCommercial} onChange={e => setFCommercial(e.target.value)} /></div>
-        <p style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase", marginBottom: 8 }}>Produits</p>
-        {fProducts.map((p, i) => <ProdRow key={i} p={p} i={i} arr={fProducts} set={setFProducts} mode="prevu" listId={PRODUITS_DATALIST_ID} />)}
-        <button onClick={() => setFProducts([...fProducts, { nom: "", lot: "", origine: "", qteAttendue: "", qteRecue: "", motif: "" }])} style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", border: "1.5px dashed #c8a84b", borderRadius: 10, background: "transparent", cursor: "pointer", fontSize: 13, color: "#c8a84b", marginBottom: 14 }}>+ Ajouter</button>
-        <div><label style={lbl}>Commentaires</label><textarea style={{ ...inp, minHeight: 55 }} value={fComment} onChange={e => setFComment(e.target.value)} /></div>
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 16 }}>
-          <button style={{ ...btn("transparent", "#1a2e1a"), border: "1.5px solid #e8e0d0" }} onClick={() => setModalPrevu(false)}>Annuler</button>
-          <button style={btn("#c8a84b", "#0a0a0a")} onClick={submitPrevu}>📤 Enregistrer</button>
-        </div>
-      </Modal>}
+      {modalPrevu && <ModalSaisiePrevu onClose={() => setModalPrevu(false)} onSubmit={async (data) => {
+        const numero = await getNextNumero();
+        const fiche = { numero, date: new Date().toLocaleDateString("fr-FR"), ts: Date.now(), ...data, statut: "nouveau", commentPrep: "", source: "commercial" };
+        const newRef = await push(ref2(dbRetours, "retours"), fiche);
+        setModalPrevu(false);
+        setModalSuccess({ fiche: { ...fiche, id: newRef.key }, source: "commercial" });
+      }} />}
 
       {/* MODAL ENTREPÔT */}
-      {modalInattendu && <Modal onClose={() => setModalInattendu(false)}>
-        <p style={{ fontSize: 15, fontWeight: 700, marginBottom: 14 }}>🏭 Retour inattendu</p>
-        <div style={{ background: "#fffbf0", border: "1.5px solid rgba(200,168,75,.3)", borderRadius: 10, padding: "10px 14px", fontSize: 12, color: "#92600a", marginBottom: 14 }}>Colis reçu sans déclaration — apparaîtra dans <strong>À rattacher</strong>.</div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
-          <div><label style={lbl}>Reçu par</label><input style={inp} value={eAgent} onChange={e => setEAgent(e.target.value)} /></div>
-          <div><label style={lbl}>Date réception</label><input style={inp} type="date" value={eDate} onChange={e => setEDate(e.target.value)} /></div>
-          <div><label style={lbl}>Client (optionnel)</label><input style={inp} value={eClient} onChange={e => setEClient(e.target.value)} /></div>
-          <div><label style={lbl}>Transporteur (optionnel)</label><input style={inp} value={eTransporteur} onChange={e => setETransporteur(e.target.value)} /></div>
-        </div>
-        <p style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase", marginBottom: 8 }}>Articles reçus</p>
-        {eProducts.map((p, i) => <ProdRow key={i} p={p} i={i} arr={eProducts} set={setEProducts} mode="entrepot" listId={PRODUITS_DATALIST_ID} />)}
-        <button onClick={() => setEProducts([...eProducts, { nom: "", lot: "", origine: "", qteRecue: "", motif: "", decisionArticle: null }])} style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", border: "1.5px dashed #c8a84b", borderRadius: 10, background: "transparent", cursor: "pointer", fontSize: 13, color: "#c8a84b", marginBottom: 14 }}>+ Ajouter</button>
-        <div><label style={lbl}>Commentaires</label><textarea style={{ ...inp, minHeight: 55 }} value={eComment} onChange={e => setEComment(e.target.value)} /></div>
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 16 }}>
-          <button style={{ ...btn("transparent", "#1a2e1a"), border: "1.5px solid #e8e0d0" }} onClick={() => setModalInattendu(false)}>Annuler</button>
-          <button style={btn("#c8a84b", "#0a0a0a")} onClick={submitEntrepot}>📤 Envoyer</button>
-        </div>
-      </Modal>}
+      {modalInattendu && <ModalSaisieInattendu onClose={() => setModalInattendu(false)} onSubmit={async (data) => {
+        const numero = await getNextNumero();
+        const fiche = { numero, date: new Date().toLocaleDateString("fr-FR"), ts: Date.now(), ...data, rattache: false, source: "entrepot" };
+        const newRef = await push(ref2(dbRetours, "retours_entrepot"), fiche);
+        setModalInattendu(false);
+        setModalSuccess({ fiche: { ...fiche, id: newRef.key, client: "(non rattaché)", bl: "—" }, source: "entrepot" });
+      }} />}
 
       {/* MODAL RATTACHEMENT */}
       {modalRattach && <Modal onClose={() => setModalRattach(null)}>
