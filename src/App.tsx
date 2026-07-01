@@ -3853,694 +3853,630 @@ const _retoursApp = getApps2().find((a: any) => a.name === "moorea-retours") ?? 
 }, "moorea-retours");
 const dbRetours = getDatabase2(_retoursApp);
 
-// ModalSaisiePrevu — composant indépendant, pas de state partagé avec le parent
-function ModalSaisiePrevu({ onClose, onSubmit }: { onClose: () => void; onSubmit: (data: any) => void }) {
-  const rClient = useRef<HTMLInputElement>(null);
-  const rBl = useRef<HTMLInputElement>(null);
-  const rTra = useRef<HTMLInputElement>(null);
-  const rDat = useRef<HTMLInputElement>(null);
-  const rCom = useRef<HTMLInputElement>(null);
-  const rCmt = useRef<HTMLTextAreaElement>(null);
-  const [rowKeys, setRowKeys] = useState<number[]>([0]);
-  const nextKey = useRef(1);
-  const rowRefs = useRef<Map<number, { nom: HTMLInputElement | null, lot: HTMLInputElement | null, ori: HTMLInputElement | null, att: HTMLInputElement | null, rec: HTMLInputElement | null, mot: HTMLSelectElement | null }>>(new Map());
+const MOTIFS_RETOUR = ["Défaut sanitaire – moisissure", "Défaut sanitaire – pourriture", "Qualité insuffisante", "Erreur de préparation", "Colis abîmé", "Livraison incomplète", "Mauvais article", "Autre"];
+const ETATS_ENTREPOT = ["Bon état", "Emballage abîmé", "Produit endommagé", "Moisissure visible", "Pourriture partielle", "Autre"];
 
-  const inp: React.CSSProperties = { padding: "10px 12px", border: "1.5px solid #e8e0d0", borderRadius: 10, background: "#fff", fontSize: 13, outline: "none", width: "100%" };
-  const lbl: React.CSSProperties = { fontSize: 11, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".5px", display: "block", marginBottom: 5 };
+async function getNextNumeroRetour(): Promise<string> {
+  try {
+    const snap = await new Promise<any>(res => { const u = onValue2(ref2(dbRetours, "compteur"), s => { u(); res(s); }); });
+    const n = (snap.val() || 0) + 1;
+    await update2(ref2(dbRetours, "/"), { compteur: n });
+    return "RC-" + new Date().getFullYear() + "-" + String(n).padStart(3, "0");
+  } catch { return "RC-" + Date.now(); }
+}
 
-  function handleSubmit() {
-    alert("handleSubmit appelé");
-    const client = rClient.current?.value?.trim() || "";
-    const bl = rBl.current?.value?.trim() || "";
-    if (!client || !bl) { alert("Client et BL requis."); return; }
-    const products: any[] = [];
-    rowKeys.forEach(k => {
-      const r = rowRefs.current.get(k);
-      if (!r) return;
-      const nom = r.nom?.value?.trim() || "";
-      if (!nom) return;
-      products.push({ nom, lot: r.lot?.value?.trim() || "", origine: r.ori?.value?.trim() || "", qteAttendue: r.att?.value?.trim() || "", qteRecue: r.rec?.value?.trim() || "", motif: r.mot?.value || "" });
+function genererPDFRetour(fiche: any) {
+  if (!fiche) return;
+  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+  const W = 210, ml = 14, mr = 14, cw = W - ml - mr;
+  let y = 0;
+  doc.setFillColor(10, 10, 10); doc.rect(0, 0, W, 32, "F");
+  doc.setFillColor(200, 168, 75); doc.rect(0, 31.5, W, 1, "F");
+  doc.setFont("helvetica", "bold"); doc.setFontSize(14); doc.setTextColor(200, 168, 75);
+  doc.text("moorea", ml, 13);
+  doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(160, 160, 160);
+  doc.text("FICHE DE RETOUR CLIENT", ml, 20);
+  doc.setFont("helvetica", "bold"); doc.setFontSize(13); doc.setTextColor(200, 168, 75);
+  doc.text(fiche.numero || "—", W - mr, 13, { align: "right" });
+  doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(120, 120, 120);
+  doc.text(fiche.date || "", W - mr, 20, { align: "right" });
+  y = 42;
+  const col1 = ml, col2 = ml + cw / 2 + 2, colW = cw / 2 - 4;
+  function infoBox(label: string, value: any, x: number, yPos: number, w: number) {
+    doc.setFillColor(247, 245, 242); doc.roundedRect(x, yPos - 4, w, 12, 1.5, 1.5, "F");
+    doc.setFont("helvetica", "normal"); doc.setFontSize(7); doc.setTextColor(140, 140, 140);
+    doc.text(label.toUpperCase(), x + 3, yPos + 0.5);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(9); doc.setTextColor(20, 20, 20);
+    doc.text(doc.splitTextToSize(String(value || "—"), w - 6)[0], x + 3, yPos + 6);
+  }
+  infoBox("Client", fiche.client, col1, y, colW); infoBox("N° BL", fiche.bl, col2, y, colW); y += 16;
+  infoBox("Transporteur", fiche.transporteur, col1, y, colW); infoBox("Date livraison", fiche.dateLiv || fiche.date, col2, y, colW); y += 16;
+  infoBox("Saisi par", fiche.commercial, col1, y, colW); infoBox("Date fiche", fiche.date, col2, y, colW); y += 20;
+  const products = fiche.products || [];
+  if (products.length) {
+    doc.setFont("helvetica", "bold"); doc.setFontSize(8); doc.setTextColor(200, 168, 75);
+    doc.text("PRODUITS", ml, y);
+    doc.setDrawColor(200, 168, 75); doc.setLineWidth(0.4); doc.line(ml, y + 1.5, ml + cw, y + 1.5); y += 7;
+    products.forEach((p: any, i: number) => {
+      if (y > 270) { doc.addPage(); y = 20; }
+      doc.setFillColor(i % 2 === 0 ? 255 : 249, 248, 246);
+      doc.rect(ml, y - 3.5, cw, 8, "F");
+      doc.setFont("helvetica", "bold"); doc.setFontSize(9); doc.setTextColor(15, 15, 15);
+      doc.text(p.nom || "—", ml + 2, y);
+      doc.setFont("helvetica", "normal"); doc.setTextColor(90, 90, 90); doc.setFontSize(8);
+      const info = [p.origine, p.lot ? "Lot " + p.lot : "", p.motif].filter(Boolean).join(" · ");
+      if (info) doc.text(info, ml + 80, y);
+      const qtInfo = [p.qteAttendue ? "Att. " + p.qteAttendue : "", p.qteRecue ? "Reçu " + p.qteRecue : ""].filter(Boolean).join(" / ");
+      if (qtInfo) doc.text(qtInfo, W - mr - 30, y, { align: "right" });
+      y += 8;
     });
-    if (!products.length) { alert("Au moins un produit requis."); return; }
-    onSubmit({ client, bl, transporteur: rTra.current?.value?.trim() || "", dateLiv: rDat.current?.value || "", commercial: rCom.current?.value?.trim() || "", comment: rCmt.current?.value?.trim() || "", products });
+    y += 4;
   }
-
-  function addRow() {
-    const k = nextKey.current++;
-    rowRefs.current.set(k, { nom: null, lot: null, ori: null, att: null, rec: null, mot: null });
-    setRowKeys(rk => [...rk, k]);
+  if (fiche.comment) {
+    doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); doc.setTextColor(50, 50, 50);
+    const lines = doc.splitTextToSize("💬 " + fiche.comment, cw - 8);
+    doc.setFillColor(247, 245, 242); doc.rect(ml, y - 3, cw, lines.length * 5 + 4, "F");
+    doc.text(lines, ml + 4, y + 1); y += lines.length * 5 + 8;
   }
-  function removeRow(k: number) {
-    rowRefs.current.delete(k);
-    setRowKeys(rk => rk.filter(x => x !== k));
-  }
-
-  // Init first row ref
-  if (!rowRefs.current.has(0)) rowRefs.current.set(0, { nom: null, lot: null, ori: null, att: null, rec: null, mot: null });
-
-  return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.55)", zIndex: 500, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: 16, overflowY: "auto" }} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div style={{ background: "#fff", borderRadius: 20, padding: 24, maxWidth: 720, width: "100%", marginTop: 20 }} onClick={e => e.stopPropagation()}>
-        <p style={{ fontSize: 15, fontWeight: 700, marginBottom: 14 }}>📋 Nouveau retour prévu</p>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
-          <div><label style={lbl}>Client</label><input ref={rClient} style={inp} placeholder="ex : Carrefour Billy" /></div>
-          <div><label style={lbl}>N° BL</label><input ref={rBl} style={inp} type="number" /></div>
-          <div><label style={lbl}>Transporteur</label><input ref={rTra} style={inp} /></div>
-          <div><label style={lbl}>Date livraison</label><input ref={rDat} style={inp} type="date" /></div>
-        </div>
-        <div style={{ marginBottom: 14 }}><label style={lbl}>Saisi par</label><input ref={rCom} style={inp} /></div>
-        <p style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase", marginBottom: 6 }}>Produits</p>
-        <div style={{ fontSize: 11, color: "#9ca3af", display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr 2fr 28px", gap: 5, marginBottom: 4 }}>
-          <span>Produit</span><span>Lot</span><span>Origine</span><span>Att.</span><span>Reçu</span><span>Motif</span><span></span>
-        </div>
-        {rowKeys.map(k => {
-          if (!rowRefs.current.has(k)) rowRefs.current.set(k, { nom: null, lot: null, ori: null, att: null, rec: null, mot: null });
-          const r = rowRefs.current.get(k)!;
-          return (
-            <div key={k} style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr 2fr 28px", gap: 5, marginBottom: 5, alignItems: "center" }}>
-              <input style={inp} ref={el => { r.nom = el; }} list="produits-stock-list" placeholder="Produit" autoComplete="off" />
-              <input style={inp} ref={el => { r.lot = el; }} placeholder="Lot" />
-              <input style={inp} ref={el => { r.ori = el; }} placeholder="Origine" />
-              <input style={{ ...inp, textAlign: "center" }} ref={el => { r.att = el; }} type="number" placeholder="Att." />
-              <input style={{ ...inp, textAlign: "center" }} ref={el => { r.rec = el; }} type="number" placeholder="Reçu" />
-              <select style={inp} ref={el => { r.mot = el; }}>
-                <option value="">-- Motif --</option>
-                {MOTIFS_RETOUR.map(m => <option key={m} value={m}>{m}</option>)}
-              </select>
-              {rowKeys.length > 1 && <button type="button" onClick={() => removeRow(k)} style={{ background: "transparent", border: "none", color: "#ccc", cursor: "pointer", fontSize: 16 }}>🗑</button>}
-            </div>
-          );
-        })}
-        <button type="button" onClick={addRow} style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", border: "1.5px dashed #c8a84b", borderRadius: 10, background: "transparent", cursor: "pointer", fontSize: 13, color: "#c8a84b", margin: "8px 0 14px" }}>+ Ajouter un produit</button>
-        <div><label style={lbl}>Commentaires</label><textarea ref={rCmt} style={{ ...inp, minHeight: 55, resize: "vertical" }} /></div>
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 16 }}>
-          <button type="button" style={{ padding: "10px 18px", borderRadius: 10, border: "1.5px solid #e8e0d0", background: "transparent", cursor: "pointer", fontSize: 13 }} onClick={onClose}>Annuler</button>
-          <button type="button" style={{ padding: "10px 18px", borderRadius: 10, border: "none", background: "#c8a84b", color: "#0a0a0a", cursor: "pointer", fontSize: 13, fontWeight: 700 }} onClick={handleSubmit}>📤 Enregistrer</button>
-        </div>
-      </div>
-    </div>
-  );
+  doc.setFillColor(10, 10, 10); doc.rect(0, 282, W, 15, "F");
+  doc.setFont("helvetica", "normal"); doc.setFontSize(7); doc.setTextColor(130, 130, 130);
+  doc.text("MOOREA COMMERCIAL FRUITS - 69 rue de Perpignan - 94632 Rungis cedex", W / 2, 288, { align: "center" });
+  doc.save("fiche-retour-" + (fiche.numero || "export") + ".pdf");
 }
 
-
-// ModalSaisieInattendu — même principe
-function ModalSaisieInattendu({ onClose, onSubmit }: { onClose: () => void; onSubmit: (data: any) => void }) {
-  const rAgent = useRef<HTMLInputElement>(null);
-  const rDat = useRef<HTMLInputElement>(null);
-  const rCli = useRef<HTMLInputElement>(null);
-  const rTra = useRef<HTMLInputElement>(null);
-  const rCmt = useRef<HTMLTextAreaElement>(null);
-  const [rowKeys, setRowKeys] = useState<number[]>([0]);
-  const nextKey = useRef(1);
-  const rowRefs = useRef<Map<number, { nom: HTMLInputElement|null, lot: HTMLInputElement|null, ori: HTMLInputElement|null, qte: HTMLInputElement|null, mot: HTMLSelectElement|null, da: HTMLButtonElement|null, dd: HTMLButtonElement|null }>>(new Map());
-
-  const inp: React.CSSProperties = { padding: "10px 12px", border: "1.5px solid #e8e0d0", borderRadius: 10, background: "#fff", fontSize: 13, outline: "none", width: "100%" };
-  const lbl: React.CSSProperties = { fontSize: 11, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".5px", display: "block", marginBottom: 5 };
-
-  if (!rowRefs.current.has(0)) rowRefs.current.set(0, { nom:null,lot:null,ori:null,qte:null,mot:null,da:null,dd:null });
-
-  function handleSubmit() {
-    const agent = rAgent.current?.value?.trim() || "";
-    if (!agent) { alert("Reçu par requis."); return; }
-    const products: any[] = [];
-    rowKeys.forEach(k => {
-      const r = rowRefs.current.get(k);
-      if (!r) return;
-      const nom = r.nom?.value?.trim() || "";
-      if (!nom) return;
-      const decAcc = r.da?.dataset?.on === "1";
-      const decDes = r.dd?.dataset?.on === "1";
-      products.push({ nom, lot: r.lot?.value?.trim()||"", origine: r.ori?.value?.trim()||"", qteAttendue:"", qteRecue: r.qte?.value?.trim()||"", motif: r.mot?.value||"", decisionArticle: decAcc?"accepte":decDes?"destruction":null });
-    });
-    if (!products.length) { alert("Au moins un article requis."); return; }
-    onSubmit({ agent, dateLiv: rDat.current?.value||"", clientConnu: rCli.current?.value?.trim()||null, transporteurConnu: rTra.current?.value?.trim()||null, comment: rCmt.current?.value?.trim()||"", products });
+function genererMessageRetour(fiche: any, type: string): string {
+  const prods = fiche.products || [];
+  const ligne = (p: any) => "  - " + p.nom + (p.lot ? " (Lot " + p.lot + ")" : "") + (p.origine ? " - " + p.origine : "") + (p.qteRecue ? " x" + p.qteRecue : "") + (p.motif ? " => " + p.motif : "");
+  if (type === "prevu_preparateur") return `📦 RETOUR CLIENT - ${fiche.numero}\n\n🏪 ${fiche.client}\n📋 BL ${fiche.bl}\n📅 ${fiche.dateLiv || fiche.date}\n\n${prods.map(ligne).join("\n")}\n\n${fiche.comment ? "💬 " + fiche.comment : ""}`;
+  if (type === "entrepot_nondecl") return `⚠️ RETOUR NON DECLARE - ${fiche.numero}\n\n📅 ${fiche.date} · 👤 ${fiche.agent}\n\n${prods.map(ligne).join("\n")}\n\n⚡ À rattacher`;
+  if (type === "bilan_preparateur") {
+    const totS = prods.reduce((s: number, p: any) => s + (parseInt((p.controle || {}).qStock) || 0), 0);
+    const totD = prods.reduce((s: number, p: any) => s + (parseInt((p.controle || {}).qDestroy) || 0), 0);
+    return `✅ RETOUR POINTE - ${fiche.numero}\n\n🏪 ${fiche.client} · BL ${fiche.bl}\n\n✓ ${totS} en stock · ✗ ${totD} détruits\n\n${fiche.commentPrep ? "💬 " + fiche.commentPrep : ""}`;
   }
-
-  function toggleDec(btn: HTMLButtonElement, otherBtn: HTMLButtonElement | null, activeColor: string, activeBorder: string, inactiveBorder: string) {
-    const isOn = btn.dataset.on === "1";
-    btn.dataset.on = isOn ? "0" : "1";
-    btn.style.background = !isOn ? activeColor : "transparent";
-    btn.style.borderColor = !isOn ? activeBorder : inactiveBorder;
-    if (otherBtn) { otherBtn.dataset.on = "0"; otherBtn.style.background = "transparent"; }
-  }
-
-  function addRow() {
-    const k = nextKey.current++;
-    rowRefs.current.set(k, { nom:null,lot:null,ori:null,qte:null,mot:null,da:null,dd:null });
-    setRowKeys(rk => [...rk, k]);
-  }
-  function removeRow(k: number) {
-    rowRefs.current.delete(k);
-    setRowKeys(rk => rk.filter(x => x !== k));
-  }
-
-  return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.55)", zIndex: 500, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: 16, overflowY: "auto" }} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div style={{ background: "#fff", borderRadius: 20, padding: 24, maxWidth: 720, width: "100%", marginTop: 20 }} onClick={e => e.stopPropagation()}>
-        <p style={{ fontSize: 15, fontWeight: 700, marginBottom: 10 }}>🏭 Retour inattendu</p>
-        <div style={{ background: "#fffbf0", border: "1.5px solid rgba(200,168,75,.3)", borderRadius: 10, padding: "10px 14px", fontSize: 12, color: "#92600a", marginBottom: 14 }}>Colis reçu sans déclaration — apparaîtra dans <strong>À rattacher</strong>.</div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
-          <div><label style={lbl}>Reçu par</label><input ref={rAgent} style={inp} /></div>
-          <div><label style={lbl}>Date réception</label><input ref={rDat} style={inp} type="date" defaultValue={new Date().toISOString().split("T")[0]} /></div>
-          <div><label style={lbl}>Client (optionnel)</label><input ref={rCli} style={inp} /></div>
-          <div><label style={lbl}>Transporteur (optionnel)</label><input ref={rTra} style={inp} /></div>
-        </div>
-        <p style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase", marginBottom: 6 }}>Articles reçus</p>
-        <div style={{ fontSize: 11, color: "#9ca3af", display: "grid", gridTemplateColumns: "2fr 1fr 1fr 0.8fr 1.6fr 70px 28px", gap: 5, marginBottom: 4 }}>
-          <span>Article</span><span>Lot</span><span>Origine</span><span>Qté</span><span>État</span><span>Décision</span><span></span>
-        </div>
-        {rowKeys.map(k => {
-          if (!rowRefs.current.has(k)) rowRefs.current.set(k, { nom:null,lot:null,ori:null,qte:null,mot:null,da:null,dd:null });
-          const r = rowRefs.current.get(k)!;
-          return (
-            <div key={k} style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 0.8fr 1.6fr 70px 28px", gap: 5, marginBottom: 5, alignItems: "center" }}>
-              <input style={inp} ref={el => { r.nom = el; }} list="produits-stock-list" placeholder="Article" autoComplete="off" />
-              <input style={inp} ref={el => { r.lot = el; }} placeholder="Lot" />
-              <input style={inp} ref={el => { r.ori = el; }} placeholder="Origine" />
-              <input style={{ ...inp, textAlign: "center" }} ref={el => { r.qte = el; }} type="number" placeholder="Qté" />
-              <select style={inp} ref={el => { r.mot = el; }}>
-                <option value="">-- État --</option>
-                {ETATS_ENTREPOT.map((m: string) => <option key={m} value={m}>{m}</option>)}
-              </select>
-              <div style={{ display: "flex", gap: 3 }}>
-                <button type="button" ref={el => { r.da = el; }} data-on="0"
-                  onClick={e => toggleDec(e.currentTarget, r.dd, "#dcfce7", "#15803d", "#bbf7d0")}
-                  style={{ padding: "5px 6px", borderRadius: 6, border: "1.5px solid #bbf7d0", background: "transparent", color: "#15803d", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>✓</button>
-                <button type="button" ref={el => { r.dd = el; }} data-on="0"
-                  onClick={e => toggleDec(e.currentTarget, r.da, "#fee2e2", "#dc2626", "#fecaca")}
-                  style={{ padding: "5px 6px", borderRadius: 6, border: "1.5px solid #fecaca", background: "transparent", color: "#dc2626", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>✗</button>
-              </div>
-              {rowKeys.length > 1 && <button type="button" onClick={() => removeRow(k)} style={{ background: "transparent", border: "none", color: "#ccc", cursor: "pointer", fontSize: 16 }}>🗑</button>}
-            </div>
-          );
-        })}
-        <button type="button" onClick={addRow} style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", border: "1.5px dashed #c8a84b", borderRadius: 10, background: "transparent", cursor: "pointer", fontSize: 13, color: "#c8a84b", margin: "8px 0 14px" }}>+ Ajouter</button>
-        <div><label style={lbl}>Commentaires</label><textarea ref={rCmt} style={{ ...inp, minHeight: 55, resize: "vertical" }} /></div>
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 16 }}>
-          <button type="button" style={{ padding: "10px 18px", borderRadius: 10, border: "1.5px solid #e8e0d0", background: "transparent", cursor: "pointer", fontSize: 13 }} onClick={onClose}>Annuler</button>
-          <button type="button" style={{ padding: "10px 18px", borderRadius: 10, border: "none", background: "#c8a84b", color: "#0a0a0a", cursor: "pointer", fontSize: 13, fontWeight: 700 }} onClick={handleSubmit}>📤 Envoyer</button>
-        </div>
-      </div>
-    </div>
-  );
+  return `🔗 RATTACHE - ${fiche.numero}\n\n🏪 ${fiche.client} · BL ${fiche.bl}`;
 }
 
-function ProdRow({ p, i, mode, onRemove, canRemove, listId }: any) {
-  const s: React.CSSProperties = { padding: "10px 10px", border: "1.5px solid #e8e0d0", borderRadius: 10, background: "#fff", fontSize: 13, outline: "none", width: "100%" };
-  return (
-    <div className="prod-row" style={{ display: "grid", gridTemplateColumns: mode === "prevu" ? "2fr 1fr 1fr 1.4fr 2fr 28px" : "2fr 1fr 1fr 0.8fr 1.4fr 1.6fr 28px", gap: 6, marginBottom: 6, alignItems: "center" }}>
-      <input style={s} list={listId} name="nom" placeholder={mode === "prevu" ? "Produit" : "Description"} defaultValue={p.nom} autoComplete="off" />
-      <input style={s} name="lot" type="text" placeholder="Lot" defaultValue={p.lot} />
-      <input style={s} name="origine" placeholder="Origine" defaultValue={p.origine} />
-      {mode === "prevu" ? (
-        <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
-          <input style={{ ...s, width: 52, textAlign: "center", padding: "8px 4px" }} name="qteAttendue" type="number" placeholder="Att." defaultValue={p.qteAttendue} />
-          <span style={{ color: "#bbb" }}>/</span>
-          <input style={{ ...s, width: 52, textAlign: "center", padding: "8px 4px" }} name="qteRecue" type="number" placeholder="Reçu" defaultValue={p.qteRecue} />
-        </div>
-      ) : (
-        <input style={{ ...s, textAlign: "center" }} name="qteRecue" type="number" placeholder="Qté" defaultValue={p.qteRecue} />
-      )}
-      <select style={s} name="motif" defaultValue={p.motif}>
-        <option value="">-- {mode === "prevu" ? "Motif" : "État"} --</option>
-        {(mode === "prevu" ? MOTIFS_RETOUR : ETATS_ENTREPOT).map((m: string) => <option key={m} value={m}>{m}</option>)}
-      </select>
-      {mode === "entrepot" && (
-        <div style={{ display: "flex", gap: 3 }}>
-          <button type="button" name="dec-accepte" style={{ padding: "5px 7px", borderRadius: 6, border: "1.5px solid #bbf7d0", background: p.decisionArticle === "accepte" ? "#dcfce7" : "transparent", color: "#15803d", fontSize: 11, fontWeight: 600, cursor: "pointer" }}
-            onClick={e => { const b = e.currentTarget; b.dataset.active = b.dataset.active === "1" ? "0" : "1"; b.style.background = b.dataset.active === "1" ? "#dcfce7" : "transparent"; b.style.borderColor = b.dataset.active === "1" ? "#15803d" : "#bbf7d0"; const b2 = b.nextElementSibling as HTMLButtonElement; if (b2) { b2.dataset.active = "0"; b2.style.background = "transparent"; b2.style.borderColor = "#fecaca"; } }} data-active={p.decisionArticle === "accepte" ? "1" : "0"}>✓</button>
-          <button type="button" name="dec-destruction" style={{ padding: "5px 7px", borderRadius: 6, border: "1.5px solid #fecaca", background: p.decisionArticle === "destruction" ? "#fee2e2" : "transparent", color: "#dc2626", fontSize: 11, fontWeight: 600, cursor: "pointer" }}
-            onClick={e => { const b = e.currentTarget; b.dataset.active = b.dataset.active === "1" ? "0" : "1"; b.style.background = b.dataset.active === "1" ? "#fee2e2" : "transparent"; b.style.borderColor = b.dataset.active === "1" ? "#dc2626" : "#fecaca"; const b2 = b.previousElementSibling as HTMLButtonElement; if (b2) { b2.dataset.active = "0"; b2.style.background = "transparent"; b2.style.borderColor = "#bbf7d0"; } }} data-active={p.decisionArticle === "destruction" ? "1" : "0"}>✗</button>
-        </div>
-      )}
-      {canRemove && <button type="button" onClick={onRemove} style={{ background: "transparent", border: "none", color: "#ccc", cursor: "pointer", padding: 4, fontSize: 16 }}>🗑</button>}
-    </div>
-  );
-}
-
-// Lit les valeurs des prod-rows depuis le DOM
-function readProdRows(container: HTMLElement, mode: string): any[] {
-  const rows = container.querySelectorAll(".prod-row");
-  return Array.from(rows).map(row => {
-    const g = (name: string) => (row.querySelector(`[name="${name}"]`) as HTMLInputElement)?.value?.trim() || "";
-    const decAcc = (row.querySelector('[name="dec-accepte"]') as HTMLButtonElement)?.dataset?.active === "1";
-    const decDes = (row.querySelector('[name="dec-destruction"]') as HTMLButtonElement)?.dataset?.active === "1";
-    return {
-      nom: g("nom"), lot: g("lot"), origine: g("origine"),
-      qteAttendue: mode === "prevu" ? g("qteAttendue") : "",
-      qteRecue: g("qteRecue"), motif: g("motif"),
-      decisionArticle: mode === "entrepot" ? (decAcc ? "accepte" : decDes ? "destruction" : null) : null,
-    };
-  }).filter(r => r.nom);
-}
-// Firebase moorea-qualite Realtime DB — paths: retours/, retours_entrepot/, retours_corbeille/, compteurs_retours
+// ─── Composant formulaire produit — ENTIEREMENT NON CONTROLÉ ───
+// Le state est géré dans le composant parent via un tableau de IDs
+// Les valeurs sont lues directement depuis les inputs au submit
 
 function RetoursClientsModule({ onClose }: { onClose: () => void }) {
+  const S: React.CSSProperties = { padding: "10px 12px", border: "1.5px solid #e8e0d0", borderRadius: 10, background: "#fff", fontSize: 13, outline: "none", width: "100%", fontFamily: "inherit" };
+  const L: React.CSSProperties = { fontSize: 11, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".5px", display: "block", marginBottom: 5 };
+  const BTN = (bg: string, c = "#fff"): React.CSSProperties => ({ background: bg, color: c, border: "none", borderRadius: 10, padding: "10px 16px", fontWeight: 700, fontSize: 13, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6, fontFamily: "inherit" });
+
+  // ── State principal ──
   const [retours, setRetours] = useState<any[]>([]);
   const [retoursEntrepot, setRetoursEntrepot] = useState<any[]>([]);
   const [corbeille, setCorbeille] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<"fiches" | "rattacher" | "traitees" | "corbeille">("fiches");
-  const [openId, setOpenId] = useState<string | null>(null);
-  const [modalChoix, setModalChoix] = useState(false);
-  const [modalPrevu, setModalPrevu] = useState(false);
-  const [modalInattendu, setModalInattendu] = useState(false);
-  const [modalSuccess, setModalSuccess] = useState<{ fiche: any; source: string } | null>(null);
-  const [modalRattach, setModalRattach] = useState<any | null>(null);
-  const [modalEdit, setModalEdit] = useState<any | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<{ type: string; id: string; numero: string } | null>(null);
-  const [recapMessage, setRecapMessage] = useState("");
-  const [fClient, setFClient] = useState(""); const [fBl, setFBl] = useState(""); const [fTransporteur, setFTransporteur] = useState(""); const [fDateLiv, setFDateLiv] = useState(""); const [fCommercial, setFCommercial] = useState(""); const [fComment, setFComment] = useState("");
-  const [fProducts, setFProducts] = useState<any[]>([{ nom: "", lot: "", origine: "", qteAttendue: "", qteRecue: "", motif: "" }]);
-  const [eAgent, setEAgent] = useState(""); const [eDate, setEDate] = useState(new Date().toISOString().split("T")[0]); const [eClient, setEClient] = useState(""); const [eTransporteur, setETransporteur] = useState(""); const [eComment, setEComment] = useState("");
-  const [eProducts, setEProducts] = useState<any[]>([{ nom: "", lot: "", origine: "", qteRecue: "", motif: "", decisionArticle: null }]);
-  const [rClient, setRClient] = useState(""); const [rBl, setRBl] = useState(""); const [rTransporteur, setRTransporteur] = useState(""); const [rDateLiv, setRDateLiv] = useState(""); const [rCommercial, setRCommercial] = useState(""); const [rComment, setRComment] = useState("");
-  const [editClient, setEditClient] = useState(""); const [editBl, setEditBl] = useState(""); const [editTransporteur, setEditTransporteur] = useState(""); const [editDateLiv, setEditDateLiv] = useState(""); const [editCommercial, setEditCommercial] = useState(""); const [editComment, setEditComment] = useState(""); const [editProducts, setEditProducts] = useState<any[]>([]);
-  const [controleLocal, setControleLocal] = useState<Record<string, any>>({});
-  const [commentPrepLocal, setCommentPrepLocal] = useState<Record<string, string>>({});
+  const [tab, setTab] = useState<"fiches"|"rattacher"|"traitees"|"corbeille">("fiches");
+  const [openId, setOpenId] = useState<string|null>(null);
 
+  // ── Modals ──
+  const [showChoix, setShowChoix] = useState(false);
+  const [showPrevu, setShowPrevu] = useState(false);
+  const [showInattendu, setShowInattendu] = useState(false);
+  const [showSuccess, setShowSuccess] = useState<{fiche:any,source:string}|null>(null);
+  const [showRattach, setShowRattach] = useState<any|null>(null);
+  const [showDelete, setShowDelete] = useState<{type:string,id:string,numero:string}|null>(null);
+  const [recapMsg, setRecapMsg] = useState("");
+
+  // ── Contrôle pointage ──
+  const [ctrlLocal, setCtrlLocal] = useState<Record<string,any>>({});
+  const [cmtLocal, setCmtLocal] = useState<Record<string,string>>({});
+
+  // ── Firebase listeners ──
   useEffect(() => {
     setLoading(true);
     const u1 = onValue2(ref2(dbRetours, "retours"), snap => {
       const d = snap.val();
-      setRetours(d ? Object.entries(d).map(([id, v]: any) => ({ ...v, id })).sort((a: any, b: any) => (b.ts || 0) - (a.ts || 0)) : []);
+      setRetours(d ? Object.entries(d).map(([id,v]:any) => ({...v,id})).sort((a:any,b:any)=>(b.ts||0)-(a.ts||0)) : []);
       setLoading(false);
     });
     const u2 = onValue2(ref2(dbRetours, "retours_entrepot"), snap => {
       const d = snap.val();
-      setRetoursEntrepot(d ? Object.entries(d).map(([id, v]: any) => ({ ...v, id })).sort((a: any, b: any) => (b.ts || 0) - (a.ts || 0)) : []);
+      setRetoursEntrepot(d ? Object.entries(d).map(([id,v]:any) => ({...v,id})).sort((a:any,b:any)=>(b.ts||0)-(a.ts||0)) : []);
     });
     const u3 = onValue2(ref2(dbRetours, "corbeille"), snap => {
       const d = snap.val();
-      setCorbeille(d ? Object.entries(d).map(([id, v]: any) => ({ ...v, id })).sort((a: any, b: any) => (b._deletedTs || 0) - (a._deletedTs || 0)) : []);
+      setCorbeille(d ? Object.entries(d).map(([id,v]:any) => ({...v,id})).sort((a:any,b:any)=>(b._deletedTs||0)-(a._deletedTs||0)) : []);
     });
     return () => { u1(); u2(); u3(); };
   }, []);
 
-  async function getNextNumero(): Promise<string> {
-    try {
-      const snap = await new Promise<any>(res => { const u = onValue2(ref2(dbRetours, "compteur"), s => { u(); res(s); }); });
-      const n = (snap.val() || 0) + 1;
-      await update2(ref2(dbRetours, "/"), { compteur: n });
-      return "RC-" + new Date().getFullYear() + "-" + String(n).padStart(3, "0");
-    } catch { return "RC-" + Date.now(); }
+  // ── Submit retour prévu ──
+  async function submitPrevu(data: any) {
+    const numero = await getNextNumeroRetour();
+    const fiche = { numero, date: new Date().toLocaleDateString("fr-FR"), ts: Date.now(), ...data, statut: "nouveau", commentPrep: "", source: "commercial" };
+    const r = await push2(ref2(dbRetours, "retours"), fiche);
+    setShowPrevu(false);
+    setShowSuccess({ fiche: {...fiche, id: r.key}, source: "commercial" });
   }
 
-  const histo = (() => {
-    const cm = new Map<string, any>(); const bm = new Map<string, any>(); const pm = new Map<string, any>(); const or = new Set<string>();
-    [...retours, ...retoursEntrepot].forEach((r: any) => {
-      if (r.client) cm.set(r.client, { client: r.client, transporteur: r.transporteur || "" });
-      if (r.bl) bm.set(String(r.bl), { bl: String(r.bl), client: r.client || "" });
-      (r.products || []).forEach((p: any) => { if (p.nom) { const k = p.nom.toLowerCase(); if (!pm.has(k)) pm.set(k, { nom: p.nom, origine: p.origine || "" }); } if (p.origine) or.add(p.origine); });
-    });
-    return { clients: [...cm.values()], bls: [...bm.values()], produits: [...pm.values()], origines: [...or].sort() };
-  })();
-
-  async function submitPrevu() {
-    const prods = fProducts.filter(p => p.nom.trim());
-    if (!fClient.trim() || !fBl.trim() || !prods.length) { alert("Client, BL et au moins un produit requis."); return; }
-    const numero = await getNextNumero();
-    const fiche = { numero, date: new Date().toLocaleDateString("fr-FR"), ts: Date.now(), client: fClient.trim(), bl: fBl.trim(), transporteur: fTransporteur.trim(), dateLiv: fDateLiv, commercial: fCommercial.trim(), comment: fComment.trim(), products: prods, statut: "nouveau", commentPrep: "", source: "commercial" };
-    const newRef = await push2(ref2(dbRetours, "retours"), fiche);
-    setFClient(""); setFBl(""); setFTransporteur(""); setFDateLiv(""); setFCommercial(""); setFComment(""); setFProducts([{ nom: "", lot: "", origine: "", qteAttendue: "", qteRecue: "", motif: "" }]);
-    setModalPrevu(false);
-    setModalSuccess({ fiche: { ...fiche, id: newRef.key }, source: "commercial" });
+  // ── Submit entrepôt ──
+  async function submitEntrepot(data: any) {
+    const numero = await getNextNumeroRetour();
+    const fiche = { numero, date: new Date().toLocaleDateString("fr-FR"), ts: Date.now(), ...data, rattache: false, source: "entrepot" };
+    const r = await push2(ref2(dbRetours, "retours_entrepot"), fiche);
+    setShowInattendu(false);
+    setShowSuccess({ fiche: {...fiche, id: r.key, client:"(non rattaché)", bl:"—"}, source: "entrepot" });
   }
 
-  async function submitEntrepot() {
-    const prods = eProducts.filter(p => p.nom.trim());
-    if (!eAgent.trim() || !prods.length) { alert("Reçu par et au moins un article requis."); return; }
-    const numero = await getNextNumero();
-    const fiche = { numero, date: new Date().toLocaleDateString("fr-FR"), ts: Date.now(), agent: eAgent.trim(), products: prods, comment: eComment.trim(), dateLiv: eDate, clientConnu: eClient.trim() || null, transporteurConnu: eTransporteur.trim() || null, rattache: false, source: "entrepot" };
-    const newRef = await push2(ref2(dbRetours, "retours_entrepot"), fiche);
-    setEAgent(""); setEClient(""); setETransporteur(""); setEComment(""); setEDate(new Date().toISOString().split("T")[0]); setEProducts([{ nom: "", lot: "", origine: "", qteRecue: "", motif: "", decisionArticle: null }]);
-    setModalInattendu(false);
-    setModalSuccess({ fiche: { ...fiche, id: newRef.key, client: "(non rattaché)", bl: "—" }, source: "entrepot" });
+  // ── Rattachement ──
+  async function submitRattach(data: any) {
+    if (!showRattach) return;
+    const numero = await getNextNumeroRetour();
+    const fiche = { numero, date: new Date().toLocaleDateString("fr-FR"), ts: Date.now(), ...data, products: showRattach.products||[], statut:"nouveau", commentPrep:"", source:"entrepot_rattache", entrepotId: showRattach.id };
+    const r = await push2(ref2(dbRetours, "retours"), fiche);
+    await update2(ref2(dbRetours, "retours_entrepot/" + showRattach.id), { rattache:true, clientRattache: data.client, blRattache: data.bl });
+    setShowRattach(null);
+    setShowSuccess({ fiche: {...fiche, id: r.key}, source: "commercial" });
   }
 
-  async function confirmerRattachement() {
-    if (!rClient.trim() || !rBl.trim() || !modalRattach) { alert("Client et BL requis."); return; }
-    const numero = await getNextNumero();
-    const fiche = { numero, date: new Date().toLocaleDateString("fr-FR"), ts: Date.now(), client: rClient.trim(), bl: rBl.trim(), transporteur: rTransporteur.trim(), dateLiv: rDateLiv, commercial: rCommercial.trim(), comment: rComment.trim() || modalRattach.comment || "", products: modalRattach.products || [], statut: "nouveau", commentPrep: "", source: "entrepot_rattache", entrepotId: modalRattach.id };
-    const newRef = await push2(ref2(dbRetours, "retours"), fiche);
-    await update2(ref2(dbRetours, "retours_entrepot/" + modalRattach.id), { rattache: true, clientRattache: rClient.trim(), blRattache: rBl.trim() });
-    setModalRattach(null);
-    setModalSuccess({ fiche: { ...fiche, id: newRef.key }, source: "commercial" });
-  }
-
+  // ── Valider contrôle ──
   async function validerControle(fiche: any) {
-    const products = (fiche.products || []).map((p: any, pi: number) => {
-      const ctrl = controleLocal[`${fiche.id}_${pi}`] || {};
-      const qStock = ctrl.qStock ?? p.controle?.qStock ?? 0;
-      const qDestroy = ctrl.qDestroy ?? p.controle?.qDestroy ?? 0;
-      const qManque = ctrl.qManque ?? p.controle?.qManque ?? 0;
-      return { ...p, controle: { qStock: parseInt(qStock) || 0, qDestroy: parseInt(qDestroy) || 0, qManque: parseInt(qManque) || 0 } };
+    const products = (fiche.products||[]).map((p:any,pi:number) => {
+      const ctrl = ctrlLocal[`${fiche.id}_${pi}`] || {};
+      return { ...p, controle: { qStock: parseInt(ctrl.qStock ?? p.controle?.qStock) || 0, qDestroy: parseInt(ctrl.qDestroy ?? p.controle?.qDestroy) || 0, qManque: parseInt(ctrl.qManque ?? p.controle?.qManque) || 0 } };
     });
-    await update2(ref2(dbRetours, "retours/" + fiche.id), { products, statut: "traite", commentPrep: commentPrepLocal[fiche.id] || fiche.commentPrep || "" });
+    await update2(ref2(dbRetours, "retours/" + fiche.id), { products, statut:"traite", commentPrep: cmtLocal[fiche.id] || fiche.commentPrep || "" });
     setOpenId(null);
-    setModalSuccess({ fiche: { ...fiche, products }, source: "valide" });
+    setShowSuccess({ fiche: {...fiche, products}, source: "valide" });
   }
 
-  async function sauvegarderModif() {
-    if (!modalEdit || !editClient.trim() || !editBl.trim()) return;
-    const prods = editProducts.filter((p: any) => p.nom.trim());
-    await update2(ref2(dbRetours, "retours/" + modalEdit.id), { client: editClient.trim(), bl: editBl.trim(), transporteur: editTransporteur.trim(), dateLiv: editDateLiv, commercial: editCommercial.trim(), comment: editComment.trim(), products: prods });
-    setModalEdit(null);
-  }
-
-  async function supprimerFiche(type: string, id: string, numero: string) {
+  async function supprimerFiche(type: string, id: string) {
     const path = type === "retour" ? "retours/" + id : "retours_entrepot/" + id;
     const snap = await new Promise<any>(res => { const u = onValue2(ref2(dbRetours, path), s => { u(); res(s); }); });
     const data = snap.val();
     if (data) await push2(ref2(dbRetours, "corbeille"), { ...data, _originalPath: path, _deletedAt: new Date().toLocaleDateString("fr-FR"), _deletedTs: Date.now() });
     await remove2(ref2(dbRetours, path));
-    setDeleteTarget(null);
+    setShowDelete(null);
   }
 
-  async function restaurerFiche(item: any) {
+  async function restaurer(item: any) {
     const { _originalPath, _deletedAt, _deletedTs, id, ...data } = item;
     await push2(ref2(dbRetours, _originalPath?.startsWith("retours_entrepot") ? "retours_entrepot" : "retours"), data);
     await remove2(ref2(dbRetours, "corbeille/" + id));
   }
 
-  async function repointerFiche(fiche: any) {
-    await update2(ref2(dbRetours, "retours/" + fiche.id), { statut: "en_attente" });
-    setActiveTab("fiches"); setOpenId(fiche.id);
-  }
-
-  const getCtrl = (fid: string, pi: number) => controleLocal[`${fid}_${pi}`] || {};
-  const setCtrl = async (fid: string, pi: number, field: string, val: string) => {
-    const parsed = val === "" ? null : parseInt(val) || 0;
-    setControleLocal(prev => ({ ...prev, [`${fid}_${pi}`]: { ...prev[`${fid}_${pi}`], [field]: parsed } }));
-    const fiche = retours.find(r => r.id === fid);
-    if (!fiche) return;
-    const updatedProducts = fiche.products.map((p: any, i: number) => {
-      if (i !== pi) return p;
-      return { ...p, controle: { ...(p.controle || {}), [field]: parsed } };
-    });
-    try { await update2(ref2(dbRetours, "retours/" + fid), { products: updatedProducts }); } catch {}
-  };
-
-  const total = retours.length;
-  const traites = retours.filter(r => r.statut === "traite").length;
+  // ── Stats ──
   const nonTraites = retours.filter(r => r.statut !== "traite").length;
+  const traites = retours.filter(r => r.statut === "traite").length;
   const nonRattaches = retoursEntrepot.filter(r => !r.rattache).length;
 
-  const btn = (bg: string, color = "#fff"): React.CSSProperties => ({ background: bg, color, border: "none", borderRadius: 10, padding: "10px 16px", fontWeight: 700, fontSize: 13, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6 });
-  const inp: React.CSSProperties = { padding: "10px 13px", border: "1.5px solid #e8e0d0", borderRadius: 10, background: "#fff", fontSize: 13, outline: "none", width: "100%" };
-  const lbl: React.CSSProperties = { fontSize: 11, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".5px", display: "block", marginBottom: 5 };
-
-  // Historique produits depuis arrivages
-  // Autocomplete produits via datalist HTML natif — pas de re-render
-  const PRODUITS_DATALIST_ID = "produits-stock-list";
-
-  const Modal = ({ children, onClose: mc }: any) => (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.55)", zIndex: 500, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, overflowY: "auto" }} onClick={mc}>
-      <div style={{ background: "#fff", borderRadius: 20, padding: 28, maxWidth: 680, width: "100%", maxHeight: "90vh", overflowY: "auto" }} onClick={e => e.stopPropagation()}>{children}</div>
-    </div>
+  const numBadge = (n: string) => (
+    <span style={{ fontSize: 11, fontWeight: 700, color: "#c8a84b", background: "rgba(200,168,75,.12)", border: "1px solid rgba(200,168,75,.3)", borderRadius: 6, padding: "2px 8px" }}>{n}</span>
   );
 
-  const numBadge = (n: string) => <span style={{ fontSize: 11, fontWeight: 700, color: "#c8a84b", background: "rgba(200,168,75,.12)", border: "1px solid rgba(200,168,75,.3)", borderRadius: 6, padding: "2px 8px" }}>{n}</span>;
-
+  // ── Carte fiche à valider ──
   function FicheCard({ r }: { r: any }) {
     const isOpen = openId === r.id;
-    const badge: any = { nouveau: { bg: "#f3f4f6", c: "#6b7280" }, en_attente: { bg: "#fef3c7", c: "#b45309" }, traite: { bg: "#dcfce7", c: "#15803d" } };
-    const bs = badge[r.statut] || badge.nouveau;
     const prods = r.products || [];
     return (
-      <div style={{ background: "#fff", border: "1.5px solid #e8e0d0", borderRadius: 16, padding: "1.1rem 1.4rem", marginBottom: 10 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            {numBadge(r.numero || "—")}
-            <span style={{ fontWeight: 700, fontSize: 15 }}>{r.client}</span>
-            <span style={{ color: "#6b7280", fontSize: 12 }}>BL {r.bl}</span>
-            {r.source === "entrepot_rattache" && <span style={{ background: "#f3e8ff", color: "#7c3aed", border: "1px solid #e9d5ff", borderRadius: 20, padding: "3px 10px", fontSize: 11, fontWeight: 600 }}>🏭 Entrepôt</span>}
+      <div style={{ background:"#fff", border:"1.5px solid #e8e0d0", borderRadius:16, padding:"1.1rem 1.4rem", marginBottom:10 }}>
+        <div style={{ display:"flex", justifyContent:"space-between", flexWrap:"wrap", gap:8, marginBottom:8 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+            {numBadge(r.numero||"—")}
+            <span style={{ fontWeight:700, fontSize:15 }}>{r.client}</span>
+            <span style={{ color:"#6b7280", fontSize:12 }}>BL {r.bl}</span>
           </div>
-          <span style={{ padding: "4px 11px", borderRadius: 20, fontSize: 11, fontWeight: 600, background: bs.bg, color: bs.c }}>{r.statut === "traite" ? "Traité" : r.statut === "en_attente" ? "En attente" : "Nouveau"}</span>
+          <span style={{ padding:"4px 11px", borderRadius:20, fontSize:11, fontWeight:600, background: r.statut==="traite"?"#dcfce7":"#fef3c7", color: r.statut==="traite"?"#15803d":"#b45309" }}>
+            {r.statut==="traite"?"✓ Traité":"En attente"}
+          </span>
         </div>
-        <div style={{ fontSize: 12, color: "#6b7280", display: "flex", gap: 12, flexWrap: "wrap" }}>
-          <span>📅 {r.date}</span><span>🚛 {r.transporteur || "—"}</span><span>📦 {prods.length} article{prods.length > 1 ? "s" : ""}</span>{r.commercial && <span>👤 {r.commercial}</span>}
+        <div style={{ fontSize:12, color:"#6b7280", display:"flex", gap:12, flexWrap:"wrap" }}>
+          <span>📅 {r.date}</span><span>🚛 {r.transporteur||"—"}</span><span>📦 {prods.length} article{prods.length>1?"s":""}</span>
         </div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 8 }}>
-          {prods.map((p: any, i: number) => <span key={i} style={{ background: "#f5f3ee", border: "1px solid #e8e0d0", borderRadius: 20, padding: "3px 10px", fontSize: 12, color: "#6b7280" }}>{p.nom}{p.qteRecue ? ` × ${p.qteRecue}` : ""}</span>)}
+        <div style={{ display:"flex", flexWrap:"wrap", gap:5, marginTop:8 }}>
+          {prods.map((p:any,i:number) => <span key={i} style={{ background:"#f5f3ee", border:"1px solid #e8e0d0", borderRadius:20, padding:"3px 10px", fontSize:12, color:"#6b7280" }}>{p.nom}{p.qteRecue?` × ${p.qteRecue}`:""}</span>)}
         </div>
-        <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
-          <button style={btn("#c8a84b", "#0a0a0a")} onClick={() => setOpenId(isOpen ? null : r.id)}>📋 {isOpen ? "Fermer" : "Pointer"}</button>
-          <button style={{ ...btn("#f5f3ee", "#374151"), padding: "8px 12px" }} onClick={() => { setModalEdit(r); setEditClient(r.client); setEditBl(r.bl); setEditTransporteur(r.transporteur || ""); setEditDateLiv(r.dateLiv || ""); setEditCommercial(r.commercial || ""); setEditComment(r.comment || ""); setEditProducts((r.products || []).map((p: any) => ({ ...p }))); }}>✏️</button>
-          <button style={{ ...btn("#fee2e2", "#dc2626"), padding: "8px 12px" }} onClick={() => genererPDFRetour(r)}>📄</button>
-          <button style={{ ...btn("#fee2e2", "#dc2626"), padding: "8px 12px" }} onClick={() => setDeleteTarget({ type: "retour", id: r.id, numero: r.numero })}>🗑</button>
+        <div style={{ display:"flex", gap:8, marginTop:12, flexWrap:"wrap" }}>
+          <button style={BTN("#c8a84b","#0a0a0a")} onClick={() => setOpenId(isOpen?null:r.id)}>
+            📋 {isOpen?"Fermer":"Pointer"}
+          </button>
+          <button style={{ ...BTN("#fee2e2","#dc2626"), padding:"8px 12px" }} onClick={() => genererPDFRetour(r)}>📄</button>
+          <button style={{ ...BTN("#fee2e2","#dc2626"), padding:"8px 12px" }} onClick={() => setShowDelete({type:"retour",id:r.id,numero:r.numero||""})}>🗑</button>
         </div>
         {isOpen && (
-          <div style={{ marginTop: 16, borderTop: "1.5px solid #e8e0d0", paddingTop: 16 }}>
-            <p style={{ fontSize: 11, fontWeight: 700, color: "#c8a84b", textTransform: "uppercase", marginBottom: 10 }}>Saisir les quantités reçues</p>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-              <thead><tr style={{ background: "#fafaf8", borderBottom: "1.5px solid #e8e0d0" }}>
-                <th style={{ padding: "8px 10px", textAlign: "left", fontSize: 11, color: "#9ca3af" }}>Article</th>
-                <th style={{ padding: "8px 6px", textAlign: "center", fontSize: 11, color: "#9ca3af", width: 60 }}>Att.</th>
-                <th style={{ padding: "8px 6px", textAlign: "center", fontSize: 11, color: "#15803d", width: 90 }}>✓ Stock</th>
-                <th style={{ padding: "8px 6px", textAlign: "center", fontSize: 11, color: "#dc2626", width: 90 }}>✗ Destr.</th>
-                <th style={{ padding: "8px 6px", textAlign: "center", fontSize: 11, color: "#b45309", width: 80 }}>Manq.</th>
-                <th style={{ padding: "8px 6px", textAlign: "center", fontSize: 11, color: "#1d4ed8", width: 55 }}>Solde</th>
+          <div style={{ marginTop:16, borderTop:"1.5px solid #e8e0d0", paddingTop:16 }}>
+            <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
+              <thead><tr style={{ background:"#fafaf8", borderBottom:"1.5px solid #e8e0d0" }}>
+                <th style={{ padding:"8px 10px", textAlign:"left", fontSize:11, color:"#9ca3af" }}>Article</th>
+                <th style={{ padding:"8px 6px", textAlign:"center", fontSize:11, color:"#9ca3af", width:55 }}>Att.</th>
+                <th style={{ padding:"8px 6px", textAlign:"center", fontSize:11, color:"#15803d", width:80 }}>✓ Stock</th>
+                <th style={{ padding:"8px 6px", textAlign:"center", fontSize:11, color:"#dc2626", width:80 }}>✗ Destr.</th>
+                <th style={{ padding:"8px 6px", textAlign:"center", fontSize:11, color:"#b45309", width:75 }}>Manq.</th>
+                <th style={{ padding:"8px 6px", textAlign:"center", fontSize:11, color:"#1d4ed8", width:50 }}>Solde</th>
               </tr></thead>
               <tbody>
-                {prods.map((p: any, pi: number) => {
-                  const ctrl = getCtrl(r.id, pi);
+                {prods.map((p:any, pi:number) => {
+                  const ctrl = ctrlLocal[`${r.id}_${pi}`] || {};
                   const qS = ctrl.qStock ?? p.controle?.qStock ?? "";
                   const qD = ctrl.qDestroy ?? p.controle?.qDestroy ?? "";
                   const qM = ctrl.qManque ?? p.controle?.qManque ?? "";
-                  const recu = parseInt(p.qteRecue) || 0;
-                  const solde = recu - (parseInt(qS) || 0) - (parseInt(qD) || 0);
-                  const sc = solde > 0 ? "#1d4ed8" : solde < 0 ? "#dc2626" : "#15803d";
-                  const sb = solde > 0 ? "#dbeafe" : solde < 0 ? "#fee2e2" : "#dcfce7";
+                  const recu = parseInt(p.qteRecue)||0;
+                  const solde = recu - (parseInt(qS)||0) - (parseInt(qD)||0);
+                  const sc = solde>0?"#1d4ed8":solde<0?"#dc2626":"#15803d";
                   return (
-                    <tr key={pi} style={{ borderBottom: "1px solid #f5f3ee" }}>
-                      <td style={{ padding: "8px 10px" }}>
-                        <div style={{ fontWeight: 600 }}>{p.nom}</div>
-                        <div style={{ fontSize: 11, color: "#9ca3af" }}>{[p.lot && "Lot " + p.lot, p.origine, p.motif].filter(Boolean).join(" · ")}</div>
+                    <tr key={pi} style={{ borderBottom:"1px solid #f5f3ee" }}>
+                      <td style={{ padding:"8px 10px" }}>
+                        <div style={{ fontWeight:600 }}>{p.nom}</div>
+                        <div style={{ fontSize:11, color:"#9ca3af" }}>{[p.lot&&"Lot "+p.lot,p.origine,p.motif].filter(Boolean).join(" · ")}</div>
                       </td>
-                      <td style={{ padding: "8px 6px", textAlign: "center", fontWeight: 700, color: "#9ca3af" }}>{p.qteAttendue || "—"}</td>
-                      <td style={{ padding: "6px", textAlign: "center" }}><input type="number" min="0" value={qS} placeholder="0" onChange={e => setCtrl(r.id, pi, "qStock", e.target.value)} style={{ width: 56, height: 34, textAlign: "center", border: "2px solid #bbf7d0", borderRadius: 8, background: "#f0fdf4", color: "#15803d", fontWeight: 700, fontSize: 14, outline: "none" }} /></td>
-                      <td style={{ padding: "6px", textAlign: "center" }}><input type="number" min="0" value={qD} placeholder="0" onChange={e => setCtrl(r.id, pi, "qDestroy", e.target.value)} style={{ width: 56, height: 34, textAlign: "center", border: "2px solid #fecaca", borderRadius: 8, background: "#fff5f5", color: "#dc2626", fontWeight: 700, fontSize: 14, outline: "none" }} /></td>
-                      <td style={{ padding: "6px", textAlign: "center" }}><input type="number" min="0" value={qM} placeholder="0" onChange={e => setCtrl(r.id, pi, "qManque", e.target.value)} style={{ width: 52, height: 34, textAlign: "center", border: "2px solid #fde68a", borderRadius: 8, background: "#fffbf0", color: "#b45309", fontWeight: 700, fontSize: 14, outline: "none" }} /></td>
-                      <td style={{ padding: "6px", textAlign: "center" }}><span style={{ display: "inline-block", minWidth: 34, padding: "5px 6px", borderRadius: 8, fontSize: 13, fontWeight: 700, background: sb, color: sc }}>{solde}</span></td>
+                      <td style={{ padding:"6px", textAlign:"center", fontWeight:700, color:"#9ca3af" }}>{p.qteAttendue||"—"}</td>
+                      <td style={{ padding:"6px", textAlign:"center" }}>
+                        <input type="number" min="0" value={qS} placeholder="0"
+                          onChange={e => setCtrlLocal(prev => ({...prev, [`${r.id}_${pi}`]: {...(prev[`${r.id}_${pi}`]||{}), qStock: e.target.value}}))}
+                          style={{ width:52, height:32, textAlign:"center", border:"2px solid #bbf7d0", borderRadius:8, background:"#f0fdf4", color:"#15803d", fontWeight:700, fontSize:14, outline:"none", fontFamily:"inherit" }} />
+                      </td>
+                      <td style={{ padding:"6px", textAlign:"center" }}>
+                        <input type="number" min="0" value={qD} placeholder="0"
+                          onChange={e => setCtrlLocal(prev => ({...prev, [`${r.id}_${pi}`]: {...(prev[`${r.id}_${pi}`]||{}), qDestroy: e.target.value}}))}
+                          style={{ width:52, height:32, textAlign:"center", border:"2px solid #fecaca", borderRadius:8, background:"#fff5f5", color:"#dc2626", fontWeight:700, fontSize:14, outline:"none", fontFamily:"inherit" }} />
+                      </td>
+                      <td style={{ padding:"6px", textAlign:"center" }}>
+                        <input type="number" min="0" value={qM} placeholder="0"
+                          onChange={e => setCtrlLocal(prev => ({...prev, [`${r.id}_${pi}`]: {...(prev[`${r.id}_${pi}`]||{}), qManque: e.target.value}}))}
+                          style={{ width:48, height:32, textAlign:"center", border:"2px solid #fde68a", borderRadius:8, background:"#fffbf0", color:"#b45309", fontWeight:700, fontSize:14, outline:"none", fontFamily:"inherit" }} />
+                      </td>
+                      <td style={{ padding:"6px", textAlign:"center" }}>
+                        <span style={{ display:"inline-block", minWidth:32, padding:"4px 6px", borderRadius:8, fontSize:13, fontWeight:700, background: solde>0?"#dbeafe":solde<0?"#fee2e2":"#dcfce7", color:sc }}>{solde}</span>
+                      </td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
-            <div style={{ marginTop: 10 }}>
-              <label style={lbl}>Commentaire</label>
-              <textarea defaultValue={r.commentPrep || ""} onChange={e => setCommentPrepLocal(prev => ({ ...prev, [r.id]: e.target.value }))} style={{ ...inp, minHeight: 50, resize: "vertical" }} />
+            <div style={{ marginTop:10 }}>
+              <label style={L}>Commentaire</label>
+              <textarea defaultValue={r.commentPrep||""} onChange={e => setCmtLocal(prev=>({...prev,[r.id]:e.target.value}))}
+                style={{ ...S, minHeight:50, resize:"vertical" }} />
             </div>
-            <button onClick={() => validerControle(r)} style={{ width: "100%", marginTop: 14, padding: 14, background: "#c8a84b", color: "#0a0a0a", border: "none", borderRadius: 12, cursor: "pointer", fontSize: 15, fontWeight: 700 }}>✓ Valider le retour</button>
+            <button onClick={() => validerControle(r)}
+              style={{ width:"100%", marginTop:12, padding:14, background:"#c8a84b", color:"#0a0a0a", border:"none", borderRadius:12, cursor:"pointer", fontSize:15, fontWeight:700, fontFamily:"inherit" }}>
+              ✓ Valider le retour
+            </button>
           </div>
         )}
       </div>
     );
   }
 
-  function FicheEntrepot({ r }: { r: any }) {
-    const prods = r.products || [];
+  // ── Modal simple (rattachement, suppression, succès) ──
+  function Overlay({ children, onClose: oc }: any) {
     return (
-      <div style={{ background: r.rattache ? "#f0fdf4" : "#fffbf0", border: `1.5px solid ${r.rattache ? "#bbf7d0" : "#fde68a"}`, borderRadius: 16, padding: "1.1rem 1.4rem", marginBottom: 10 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            {numBadge(r.numero || "—")}
-            <span style={{ fontWeight: 700, fontSize: 14 }}>{r.clientConnu || "Client non identifié"}</span>
-            <span style={{ padding: "3px 10px", borderRadius: 20, fontSize: 11, fontWeight: 600, background: r.rattache ? "#dcfce7" : "#fef3c7", color: r.rattache ? "#15803d" : "#b45309" }}>{r.rattache ? "✓ Rattaché" : "⏳ À rattacher"}</span>
+      <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.55)", zIndex:500, display:"flex", alignItems:"center", justifyContent:"center", padding:16, overflowY:"auto" }}
+        onMouseDown={e => { if (e.target === e.currentTarget) oc(); }}>
+        <div style={{ background:"#fff", borderRadius:20, padding:28, maxWidth:560, width:"100%", maxHeight:"90vh", overflowY:"auto" }}>{children}</div>
+      </div>
+    );
+  }
+
+  // ── Formulaire saisie — rendu inline dans un Overlay, state local ──
+  function FormSaisie({ mode, onClose: oc, onSubmit: os }: { mode:"prevu"|"entrepot", onClose:()=>void, onSubmit:(d:any)=>void }) {
+    const [client, setClient] = useState("");
+    const [bl, setBl] = useState("");
+    const [tra, setTra] = useState("");
+    const [dat, setDat] = useState("");
+    const [com, setCom] = useState("");
+    const [cmt, setCmt] = useState("");
+    const [agent, setAgent] = useState("");
+    const [datE, setDatE] = useState(new Date().toISOString().split("T")[0]);
+    const [cliE, setCliE] = useState("");
+    const [traE, setTraE] = useState("");
+    const [cmtE, setCmtE] = useState("");
+    const [rows, setRows] = useState<any[]>([emptyRow()]);
+
+    function emptyRow() { return { nom:"", lot:"", origine:"", qteAttendue:"", qteRecue:"", motif:"", decisionArticle:null }; }
+    function upRow(i:number, f:string, v:any) { setRows(rs => rs.map((r,j) => j===i ? {...r,[f]:v} : r)); }
+
+    function submit() {
+      const products = rows.filter(r => r.nom.trim());
+      if (mode==="prevu") {
+        if (!client.trim() || !bl.trim() || !products.length) { alert("Client, BL et au moins un produit requis."); return; }
+        os({ client:client.trim(), bl:bl.trim(), transporteur:tra.trim(), dateLiv:dat, commercial:com.trim(), comment:cmt.trim(), products });
+      } else {
+        if (!agent.trim() || !products.length) { alert("Reçu par et au moins un article requis."); return; }
+        os({ agent:agent.trim(), dateLiv:datE, clientConnu:cliE.trim()||null, transporteurConnu:traE.trim()||null, comment:cmtE.trim(), products });
+      }
+    }
+
+    return (
+      <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.55)", zIndex:500, display:"flex", alignItems:"flex-start", justifyContent:"center", padding:16, overflowY:"auto" }}
+        onMouseDown={e => { if (e.target === e.currentTarget) oc(); }}>
+        <div style={{ background:"#fff", borderRadius:20, padding:24, maxWidth:680, width:"100%", marginTop:16, marginBottom:16 }}>
+          <p style={{ fontSize:15, fontWeight:700, marginBottom:14 }}>{mode==="prevu"?"📋 Nouveau retour prévu":"🏭 Retour inattendu"}</p>
+
+          {mode==="prevu" ? (
+            <>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:12 }}>
+                <div><label style={L}>Client</label><input style={S} value={client} onChange={e=>setClient(e.target.value)} placeholder="ex : Carrefour" /></div>
+                <div><label style={L}>N° BL</label><input style={S} type="number" value={bl} onChange={e=>setBl(e.target.value)} /></div>
+                <div><label style={L}>Transporteur</label><input style={S} value={tra} onChange={e=>setTra(e.target.value)} /></div>
+                <div><label style={L}>Date livraison</label><input style={S} type="date" value={dat} onChange={e=>setDat(e.target.value)} /></div>
+              </div>
+              <div style={{ marginBottom:14 }}><label style={L}>Saisi par</label><input style={S} value={com} onChange={e=>setCom(e.target.value)} /></div>
+            </>
+          ) : (
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:12 }}>
+              <div><label style={L}>Reçu par</label><input style={S} value={agent} onChange={e=>setAgent(e.target.value)} /></div>
+              <div><label style={L}>Date réception</label><input style={S} type="date" value={datE} onChange={e=>setDatE(e.target.value)} /></div>
+              <div><label style={L}>Client (optionnel)</label><input style={S} value={cliE} onChange={e=>setCliE(e.target.value)} /></div>
+              <div><label style={L}>Transporteur (optionnel)</label><input style={S} value={traE} onChange={e=>setTraE(e.target.value)} /></div>
+            </div>
+          )}
+
+          <p style={{ fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", marginBottom:8 }}>
+            {mode==="prevu"?"Produits":"Articles reçus"}
+          </p>
+
+          {rows.map((row, i) => (
+            <div key={i} style={{ display:"grid", gridTemplateColumns: mode==="prevu" ? "2fr 1fr 1fr 0.8fr 0.8fr 1.8fr 28px" : "2fr 1fr 1fr 0.9fr 1.8fr 70px 28px", gap:5, marginBottom:6, alignItems:"center" }}>
+              <input style={S} list="produits-stock-list" placeholder="Produit" value={row.nom} onChange={e=>upRow(i,"nom",e.target.value)} autoComplete="off" />
+              <input style={S} placeholder="Lot" value={row.lot} onChange={e=>upRow(i,"lot",e.target.value)} />
+              <input style={S} placeholder="Origine" value={row.origine} onChange={e=>upRow(i,"origine",e.target.value)} />
+              {mode==="prevu" ? (
+                <>
+                  <input style={{...S,textAlign:"center"}} type="number" placeholder="Att." value={row.qteAttendue} onChange={e=>upRow(i,"qteAttendue",e.target.value)} />
+                  <input style={{...S,textAlign:"center"}} type="number" placeholder="Reçu" value={row.qteRecue} onChange={e=>upRow(i,"qteRecue",e.target.value)} />
+                </>
+              ) : (
+                <input style={{...S,textAlign:"center"}} type="number" placeholder="Qté" value={row.qteRecue} onChange={e=>upRow(i,"qteRecue",e.target.value)} />
+              )}
+              <select style={S} value={row.motif} onChange={e=>upRow(i,"motif",e.target.value)}>
+                <option value="">--</option>
+                {(mode==="prevu"?MOTIFS_RETOUR:ETATS_ENTREPOT).map(m=><option key={m} value={m}>{m}</option>)}
+              </select>
+              {mode==="entrepot" && (
+                <div style={{ display:"flex", gap:3 }}>
+                  <button type="button" onClick={()=>upRow(i,"decisionArticle",row.decisionArticle==="accepte"?null:"accepte")}
+                    style={{ padding:"5px 6px", borderRadius:6, border:`1.5px solid ${row.decisionArticle==="accepte"?"#15803d":"#bbf7d0"}`, background:row.decisionArticle==="accepte"?"#dcfce7":"transparent", color:"#15803d", fontSize:11, fontWeight:600, cursor:"pointer" }}>✓</button>
+                  <button type="button" onClick={()=>upRow(i,"decisionArticle",row.decisionArticle==="destruction"?null:"destruction")}
+                    style={{ padding:"5px 6px", borderRadius:6, border:`1.5px solid ${row.decisionArticle==="destruction"?"#dc2626":"#fecaca"}`, background:row.decisionArticle==="destruction"?"#fee2e2":"transparent", color:"#dc2626", fontSize:11, fontWeight:600, cursor:"pointer" }}>✗</button>
+                </div>
+              )}
+              {rows.length>1 && <button type="button" onClick={()=>setRows(rs=>rs.filter((_,j)=>j!==i))} style={{ background:"transparent", border:"none", color:"#ccc", cursor:"pointer", fontSize:16 }}>🗑</button>}
+            </div>
+          ))}
+
+          <button type="button" onClick={()=>setRows(rs=>[...rs,emptyRow()])}
+            style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 14px", border:"1.5px dashed #c8a84b", borderRadius:10, background:"transparent", cursor:"pointer", fontSize:13, color:"#c8a84b", margin:"8px 0 14px", fontFamily:"inherit" }}>
+            + Ajouter
+          </button>
+
+          <div style={{ marginBottom:14 }}>
+            <label style={L}>Commentaires</label>
+            <textarea style={{...S,minHeight:55,resize:"vertical"}} value={mode==="prevu"?cmt:cmtE} onChange={e=>mode==="prevu"?setCmt(e.target.value):setCmtE(e.target.value)} />
           </div>
-          <div style={{ fontSize: 12, color: "#6b7280" }}>📅 {r.date} · 👤 {r.agent}</div>
-        </div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 10 }}>
-          {prods.map((p: any, i: number) => <span key={i} style={{ background: "#fff", border: "1px solid #e8e0d0", borderRadius: 20, padding: "3px 10px", fontSize: 12, color: "#6b7280" }}>{p.nom}{p.qteRecue ? ` × ${p.qteRecue}` : ""}{p.decisionArticle === "accepte" ? " ✓" : p.decisionArticle === "destruction" ? " ✗" : ""}</span>)}
-        </div>
-        {r.rattache && <div style={{ fontSize: 12, color: "#15803d", padding: "6px 10px", background: "#f0fdf4", borderRadius: 8, marginBottom: 8 }}>🔗 Rattaché à : <strong>{r.clientRattache}</strong> — BL {r.blRattache}</div>}
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {!r.rattache && <button style={btn("#fef3c7", "#b45309")} onClick={() => { setModalRattach(r); setRClient(r.clientConnu || ""); setRTransporteur(r.transporteurConnu || ""); setRBl(""); setRCommercial(""); setRComment(r.comment || ""); setRDateLiv(r.dateLiv || ""); }}>🔗 Rattacher</button>}
-          <button style={{ ...btn("#fee2e2", "#dc2626"), padding: "8px 12px" }} onClick={() => genererPDFRetour({ ...r, client: r.clientRattache || r.clientConnu || "—", bl: r.blRattache || "—" })}>📄</button>
-          <button style={{ ...btn("#fee2e2", "#dc2626"), padding: "8px 12px" }} onClick={() => setDeleteTarget({ type: "entrepot", id: r.id, numero: r.numero })}>🗑</button>
+
+          <div style={{ display:"flex", justifyContent:"flex-end", gap:10 }}>
+            <button type="button" style={{ padding:"10px 18px", borderRadius:10, border:"1.5px solid #e8e0d0", background:"transparent", cursor:"pointer", fontSize:13, fontFamily:"inherit" }} onClick={oc}>Annuler</button>
+            <button type="button" style={{ padding:"10px 18px", borderRadius:10, border:"none", background:"#c8a84b", color:"#0a0a0a", cursor:"pointer", fontSize:13, fontWeight:700, fontFamily:"inherit" }} onClick={submit}>
+              📤 {mode==="prevu"?"Enregistrer":"Envoyer"}
+            </button>
+          </div>
         </div>
       </div>
     );
   }
 
-  const topBar = (
-    <div style={{ background: "#0a0a0a", borderBottom: "3px solid #c8a84b", position: "sticky", top: 0, zIndex: 200, paddingTop: "env(safe-area-inset-top, 0px)" }}>
-      <div style={{ maxWidth: 900, margin: "0 auto", height: 56, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 16px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <button onClick={onClose} style={{ background: "rgba(255,255,255,0.1)", border: "none", borderRadius: 8, color: "#fff", padding: "6px 12px", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>← Retour</button>
-          <span style={{ fontWeight: 800, fontSize: 15, color: "#fff" }}>📦 Retours clients</span>
-        </div>
-        <button style={btn("#c8a84b", "#0a0a0a")} onClick={() => setModalChoix(true)}>+ Saisir</button>
-      </div>
-    </div>
-  );
-
   return (
-    <div style={{ minHeight: "100vh", background: "#f5f3ee", fontFamily: "'Syne', sans-serif" }}>
-      {/* Datalist pour autocomplete produits */}
-      <datalist id={PRODUITS_DATALIST_ID}>
-        {STOCK_ARTICLES_LIST.map((s, i) => <option key={i} value={s.article} />)}
+    <div style={{ minHeight:"100vh", background:"#f5f3ee", fontFamily:"'Syne', sans-serif" }}>
+      <datalist id="produits-stock-list">
+        {STOCK_ARTICLES_LIST.map((s,i) => <option key={i} value={s.article} />)}
       </datalist>
-      {topBar}
-      <div style={{ maxWidth: 900, margin: "0 auto", padding: "16px 12px 80px" }}>
+
+      {/* TOP BAR */}
+      <div style={{ background:"#0a0a0a", borderBottom:"3px solid #c8a84b", position:"sticky", top:0, zIndex:200 }}>
+        <div style={{ maxWidth:900, margin:"0 auto", height:56, display:"flex", alignItems:"center", justifyContent:"space-between", padding:"0 16px" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+            <button onClick={onClose} style={{ background:"rgba(255,255,255,.1)", border:"none", borderRadius:8, color:"#fff", padding:"6px 12px", cursor:"pointer", fontSize:13, fontWeight:600, fontFamily:"inherit" }}>← Retour</button>
+            <span style={{ fontWeight:800, fontSize:15, color:"#fff" }}>📦 Retours clients</span>
+          </div>
+          <button style={BTN("#c8a84b","#0a0a0a")} onClick={()=>setShowChoix(true)}>+ Saisir</button>
+        </div>
+      </div>
+
+      <div style={{ maxWidth:900, margin:"0 auto", padding:"16px 12px 80px" }}>
 
         {/* Stats */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 16 }}>
-          {[["Total", total, "#1a2e1a"], ["Traitées", traites, "#15803d"], ["À valider", nonTraites, "#c8a84b"], ["À rattacher", nonRattaches, "#b45309"]].map(([l, n, c]) => (
-            <div key={l as string} style={{ background: "#fff", border: "1.5px solid #e8e0d0", borderRadius: 12, padding: 12, textAlign: "center" }}>
-              <div style={{ fontSize: 22, fontWeight: 800, color: c as string }}>{n}</div>
-              <div style={{ fontSize: 11, color: "#9ca3af", textTransform: "uppercase" }}>{l}</div>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:10, marginBottom:16 }}>
+          {[["Total",retours.length,"#1a2e1a"],["Traitées",traites,"#15803d"],["À valider",nonTraites,"#c8a84b"],["À rattacher",nonRattaches,"#b45309"]].map(([l,n,c])=>(
+            <div key={l as string} style={{ background:"#fff", border:"1.5px solid #e8e0d0", borderRadius:12, padding:12, textAlign:"center" }}>
+              <div style={{ fontSize:22, fontWeight:800, color:c as string }}>{n}</div>
+              <div style={{ fontSize:11, color:"#9ca3af", textTransform:"uppercase" }}>{l}</div>
             </div>
           ))}
         </div>
 
         {/* Onglets */}
-        <div style={{ display: "flex", gap: 4, background: "#0a0a0a", borderRadius: 12, padding: 5, marginBottom: 16, overflowX: "auto" }}>
-          {([["fiches", "⏱ En attente", nonTraites], ["rattacher", "🔗 À rattacher", nonRattaches], ["traitees", "✓ Traités", traites], ["corbeille", "🗑 Corbeille", corbeille.length]] as any[]).map(([k, l, c]) => (
-            <button key={k} onClick={() => setActiveTab(k)}
-              style={{ padding: "9px 14px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 13, fontWeight: activeTab === k ? 700 : 500, color: activeTab === k ? "#0a0a0a" : "rgba(255,255,255,.6)", background: activeTab === k ? "#c8a84b" : "transparent", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 6 }}>
-              {l} {c > 0 && <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 20, background: activeTab === k ? "#0a0a0a" : "#c8a84b", color: activeTab === k ? "#c8a84b" : "#0a0a0a" }}>{c}</span>}
+        <div style={{ display:"flex", gap:4, background:"#0a0a0a", borderRadius:12, padding:5, marginBottom:16, overflowX:"auto" }}>
+          {([["fiches","⏱ En attente",nonTraites],["rattacher","🔗 À rattacher",nonRattaches],["traitees","✓ Traités",traites],["corbeille","🗑 Corbeille",corbeille.length]] as any[]).map(([k,l,c])=>(
+            <button key={k} onClick={()=>setTab(k)}
+              style={{ padding:"9px 14px", borderRadius:8, border:"none", cursor:"pointer", fontSize:13, fontWeight:tab===k?700:500, color:tab===k?"#0a0a0a":"rgba(255,255,255,.6)", background:tab===k?"#c8a84b":"transparent", whiteSpace:"nowrap", display:"flex", alignItems:"center", gap:6, fontFamily:"inherit" }}>
+              {l} {c>0 && <span style={{ fontSize:10, fontWeight:700, padding:"1px 6px", borderRadius:20, background:tab===k?"#0a0a0a":"#c8a84b", color:tab===k?"#c8a84b":"#0a0a0a" }}>{c}</span>}
             </button>
           ))}
         </div>
 
-        {loading ? <div style={{ textAlign: "center", padding: 40, color: "#9ca3af" }}>Chargement...</div> : (
-          <>
-            {activeTab === "fiches" && (retours.filter(r => r.statut !== "traite").length === 0 ? <div style={{ textAlign: "center", padding: "3rem", background: "#fff", borderRadius: 14, color: "#9ca3af" }}>Aucune fiche à valider</div> : retours.filter(r => r.statut !== "traite").map(r => <FicheCard key={r.id} r={r} />))}
-            {activeTab === "rattacher" && (retoursEntrepot.filter(r => !r.rattache).length === 0 ? <div style={{ textAlign: "center", padding: "3rem", background: "#fff", borderRadius: 14, color: "#9ca3af" }}>Rien à rattacher ✓</div> : retoursEntrepot.filter(r => !r.rattache).map(r => <FicheEntrepot key={r.id} r={r} />))}
-            {activeTab === "traitees" && (retours.filter(r => r.statut === "traite").length === 0 ? <div style={{ textAlign: "center", padding: "3rem", background: "#fff", borderRadius: 14, color: "#9ca3af" }}>Aucune fiche traitée</div> : retours.filter(r => r.statut === "traite").map(r => (
-              <div key={r.id} style={{ background: "#f0fdf4", border: "1.5px solid #bbf7d0", borderRadius: 16, padding: "1.1rem 1.4rem", marginBottom: 10 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 6 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>{numBadge(r.numero)}<span style={{ fontWeight: 700 }}>{r.client}</span><span style={{ color: "#6b7280", fontSize: 12 }}>BL {r.bl}</span><span style={{ background: "#dcfce7", color: "#15803d", border: "1px solid #bbf7d0", borderRadius: 20, padding: "3px 10px", fontSize: 11, fontWeight: 600 }}>✓ Traité</span></div>
-                  <div style={{ display: "flex", gap: 6 }}>
-                    <button style={{ ...btn("#dbeafe", "#1d4ed8"), padding: "7px 12px", fontSize: 12 }} onClick={() => repointerFiche(r)}>📋 Repointer</button>
-                    <button style={{ ...btn("#fee2e2", "#dc2626"), padding: "7px 9px", fontSize: 12 }} onClick={() => genererPDFRetour(r)}>📄</button>
-                    <button style={{ ...btn("#fee2e2", "#dc2626"), padding: "7px 9px", fontSize: 11 }} onClick={() => setDeleteTarget({ type: "retour", id: r.id, numero: r.numero })}>🗑</button>
+        {loading ? <div style={{ textAlign:"center", padding:40, color:"#9ca3af" }}>Chargement...</div> : <>
+
+          {tab==="fiches" && (
+            retours.filter(r=>r.statut!=="traite").length===0
+              ? <div style={{ textAlign:"center", padding:"3rem", background:"#fff", borderRadius:14, color:"#9ca3af" }}>Aucune fiche à valider</div>
+              : retours.filter(r=>r.statut!=="traite").map(r => <FicheCard key={r.id} r={r} />)
+          )}
+
+          {tab==="rattacher" && (
+            retoursEntrepot.filter(r=>!r.rattache).length===0
+              ? <div style={{ textAlign:"center", padding:"3rem", background:"#fff", borderRadius:14, color:"#9ca3af" }}>Rien à rattacher ✓</div>
+              : retoursEntrepot.filter(r=>!r.rattache).map(r => (
+                <div key={r.id} style={{ background:"#fffbf0", border:"1.5px solid #fde68a", borderRadius:16, padding:"1.1rem 1.4rem", marginBottom:10 }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", flexWrap:"wrap", gap:8, marginBottom:8 }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                      {numBadge(r.numero||"—")}
+                      <span style={{ fontWeight:700 }}>{r.clientConnu||"Client non identifié"}</span>
+                    </div>
+                    <span style={{ fontSize:12, color:"#6b7280" }}>📅 {r.date} · 👤 {r.agent}</span>
+                  </div>
+                  <div style={{ display:"flex", flexWrap:"wrap", gap:5, marginBottom:10 }}>
+                    {(r.products||[]).map((p:any,i:number) => <span key={i} style={{ background:"#fff", border:"1px solid #e8e0d0", borderRadius:20, padding:"3px 10px", fontSize:12, color:"#6b7280" }}>{p.nom}{p.qteRecue?` × ${p.qteRecue}`:""}</span>)}
+                  </div>
+                  <div style={{ display:"flex", gap:8 }}>
+                    <button style={BTN("#fef3c7","#b45309")} onClick={()=>setShowRattach(r)}>🔗 Rattacher</button>
+                    <button style={{ ...BTN("#fee2e2","#dc2626"), padding:"8px 12px" }} onClick={()=>setShowDelete({type:"entrepot",id:r.id,numero:r.numero||""})}>🗑</button>
                   </div>
                 </div>
-                <div style={{ fontSize: 12, color: "#6b7280" }}>📅 {r.date} · 🚛 {r.transporteur || "—"}{r.commercial ? ` · 👤 ${r.commercial}` : ""}</div>
-              </div>
-            )))}
-            {activeTab === "corbeille" && (
-              <>
-                {corbeille.length > 0 && <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}><button style={btn("#fee2e2", "#dc2626")} onClick={async () => { if (confirm("Vider la corbeille ?")) { await Promise.all(corbeille.map(c => remove2(ref2(dbRetours, "corbeille/" + c.id)))); } }}>🗑 Vider</button></div>}
-                {corbeille.length === 0 ? <div style={{ textAlign: "center", padding: "3rem", background: "#fff", borderRadius: 14, color: "#9ca3af" }}>Corbeille vide</div> : corbeille.map(r => (
-                  <div key={r.id} style={{ background: "#fff", border: "1.5px solid #fecaca", borderRadius: 14, padding: "1rem 1.2rem", marginBottom: 8 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>{numBadge(r.numero || "—")}<span style={{ fontWeight: 700 }}>{r.client || r.clientConnu || "—"}</span>{r.bl && <span style={{ color: "#6b7280", fontSize: 12 }}>BL {r.bl}</span>}</div>
-                      <span style={{ fontSize: 11, color: "#dc2626" }}>Supprimé le {r._deletedAt}</span>
+              ))
+          )}
+
+          {tab==="traitees" && (
+            retours.filter(r=>r.statut==="traite").length===0
+              ? <div style={{ textAlign:"center", padding:"3rem", background:"#fff", borderRadius:14, color:"#9ca3af" }}>Aucune fiche traitée</div>
+              : retours.filter(r=>r.statut==="traite").map(r => (
+                <div key={r.id} style={{ background:"#f0fdf4", border:"1.5px solid #bbf7d0", borderRadius:16, padding:"1.1rem 1.4rem", marginBottom:10 }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", flexWrap:"wrap", gap:8 }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                      {numBadge(r.numero||"—")}
+                      <span style={{ fontWeight:700 }}>{r.client}</span>
+                      <span style={{ color:"#6b7280", fontSize:12 }}>BL {r.bl}</span>
+                      <span style={{ background:"#dcfce7", color:"#15803d", border:"1px solid #bbf7d0", borderRadius:20, padding:"3px 10px", fontSize:11, fontWeight:600 }}>✓ Traité</span>
                     </div>
-                    <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-                      <button style={btn("#dcfce7", "#15803d")} onClick={() => restaurerFiche(r)}>↩ Restaurer</button>
-                      <button style={btn("#fee2e2", "#dc2626")} onClick={async () => { if (confirm("Supprimer définitivement ?")) await remove2(ref2(dbRetours, "corbeille/" + r.id)); }}>🗑 Définitif</button>
+                    <div style={{ display:"flex", gap:6 }}>
+                      <button style={{ ...BTN("#fee2e2","#dc2626"), padding:"7px 9px", fontSize:12 }} onClick={()=>genererPDFRetour(r)}>📄</button>
+                      <button style={{ ...BTN("#fee2e2","#dc2626"), padding:"7px 9px", fontSize:11 }} onClick={()=>setShowDelete({type:"retour",id:r.id,numero:r.numero||""})}>🗑</button>
+                    </div>
+                  </div>
+                  <div style={{ fontSize:12, color:"#6b7280", marginTop:6 }}>📅 {r.date} · 🚛 {r.transporteur||"—"}</div>
+                </div>
+              ))
+          )}
+
+          {tab==="corbeille" && (
+            corbeille.length===0
+              ? <div style={{ textAlign:"center", padding:"3rem", background:"#fff", borderRadius:14, color:"#9ca3af" }}>Corbeille vide</div>
+              : <>
+                <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:10 }}>
+                  <button style={BTN("#fee2e2","#dc2626")} onClick={async()=>{ if(confirm("Vider la corbeille ?")) await Promise.all(corbeille.map(c=>remove2(ref2(dbRetours,"corbeille/"+c.id)))); }}>🗑 Vider</button>
+                </div>
+                {corbeille.map(r => (
+                  <div key={r.id} style={{ background:"#fff", border:"1.5px solid #fecaca", borderRadius:14, padding:"1rem 1.2rem", marginBottom:8 }}>
+                    <div style={{ display:"flex", justifyContent:"space-between", gap:8, marginBottom:6, flexWrap:"wrap" }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                        {numBadge(r.numero||"—")}
+                        <span style={{ fontWeight:700 }}>{r.client||r.clientConnu||"—"}</span>
+                      </div>
+                      <span style={{ fontSize:11, color:"#dc2626" }}>Supprimé le {r._deletedAt}</span>
+                    </div>
+                    <div style={{ display:"flex", gap:8, marginTop:8 }}>
+                      <button style={BTN("#dcfce7","#15803d")} onClick={()=>restaurer(r)}>↩ Restaurer</button>
+                      <button style={BTN("#fee2e2","#dc2626")} onClick={async()=>{ if(confirm("Supprimer définitivement ?")) await remove2(ref2(dbRetours,"corbeille/"+r.id)); }}>🗑 Définitif</button>
                     </div>
                   </div>
                 ))}
               </>
-            )}
-          </>
-        )}
+          )}
+        </>}
       </div>
 
       {/* MODAL CHOIX */}
-      {modalChoix && <Modal onClose={() => setModalChoix(false)}>
-        <p style={{ fontSize: 16, fontWeight: 700, textAlign: "center", marginBottom: 20 }}>+ Saisir un retour</p>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-          <button onClick={() => { setModalChoix(false); setModalPrevu(true); }} style={{ padding: "1.5rem 1rem", background: "#f5f3ee", border: "2px solid #e8e0d0", borderRadius: 16, cursor: "pointer", textAlign: "center" }}><div style={{ fontSize: 32, marginBottom: 8 }}>📦</div><div style={{ fontWeight: 700 }}>Retour prévu</div><div style={{ fontSize: 12, color: "#6b7280", marginTop: 4 }}>Le commercial saisit la fiche</div></button>
-          <button onClick={() => { setModalChoix(false); setModalInattendu(true); }} style={{ padding: "1.5rem 1rem", background: "#f5f3ee", border: "2px solid #e8e0d0", borderRadius: 16, cursor: "pointer", textAlign: "center" }}><div style={{ fontSize: 32, marginBottom: 8 }}>⚠️</div><div style={{ fontWeight: 700 }}>Retour inattendu</div><div style={{ fontSize: 12, color: "#6b7280", marginTop: 4 }}>Colis reçu sans déclaration</div></button>
-        </div>
-        <div style={{ textAlign: "center", marginTop: 16 }}><button style={{ ...btn("transparent", "#1a2e1a"), border: "1.5px solid #e8e0d0" }} onClick={() => setModalChoix(false)}>Annuler</button></div>
-      </Modal>}
+      {showChoix && (
+        <Overlay onClose={()=>setShowChoix(false)}>
+          <p style={{ fontSize:16, fontWeight:700, textAlign:"center", marginBottom:20 }}>+ Saisir un retour</p>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 }}>
+            <button onClick={()=>{setShowChoix(false);setShowPrevu(true);}} style={{ padding:"1.5rem 1rem", background:"#f5f3ee", border:"2px solid #e8e0d0", borderRadius:16, cursor:"pointer", textAlign:"center", fontFamily:"inherit" }}>
+              <div style={{ fontSize:32, marginBottom:8 }}>📦</div>
+              <div style={{ fontWeight:700 }}>Retour prévu</div>
+              <div style={{ fontSize:12, color:"#6b7280", marginTop:4 }}>Commercial</div>
+            </button>
+            <button onClick={()=>{setShowChoix(false);setShowInattendu(true);}} style={{ padding:"1.5rem 1rem", background:"#f5f3ee", border:"2px solid #e8e0d0", borderRadius:16, cursor:"pointer", textAlign:"center", fontFamily:"inherit" }}>
+              <div style={{ fontSize:32, marginBottom:8 }}>⚠️</div>
+              <div style={{ fontWeight:700 }}>Retour inattendu</div>
+              <div style={{ fontSize:12, color:"#6b7280", marginTop:4 }}>Entrepôt</div>
+            </button>
+          </div>
+          <div style={{ textAlign:"center", marginTop:16 }}>
+            <button style={{ padding:"10px 18px", borderRadius:10, border:"1.5px solid #e8e0d0", background:"transparent", cursor:"pointer", fontSize:13, fontFamily:"inherit" }} onClick={()=>setShowChoix(false)}>Annuler</button>
+          </div>
+        </Overlay>
+      )}
 
-      {/* MODAL RETOUR PRÉVU */}
-      {modalPrevu && <ModalSaisiePrevu onClose={() => setModalPrevu(false)} onSubmit={async (data) => {
-        const numero = await getNextNumero();
-        const fiche = { numero, date: new Date().toLocaleDateString("fr-FR"), ts: Date.now(), ...data, statut: "nouveau", commentPrep: "", source: "commercial" };
-        const newRef = await push2(ref2(dbRetours, "retours"), fiche);
-        setModalPrevu(false);
-        setModalSuccess({ fiche: { ...fiche, id: newRef.key }, source: "commercial" });
-      }} />}
-
-      {/* MODAL ENTREPÔT */}
-      {modalInattendu && <ModalSaisieInattendu onClose={() => setModalInattendu(false)} onSubmit={async (data) => {
-        const numero = await getNextNumero();
-        const fiche = { numero, date: new Date().toLocaleDateString("fr-FR"), ts: Date.now(), ...data, rattache: false, source: "entrepot" };
-        const newRef = await push2(ref2(dbRetours, "retours_entrepot"), fiche);
-        setModalInattendu(false);
-        setModalSuccess({ fiche: { ...fiche, id: newRef.key, client: "(non rattaché)", bl: "—" }, source: "entrepot" });
-      }} />}
+      {showPrevu && <FormSaisie mode="prevu" onClose={()=>setShowPrevu(false)} onSubmit={submitPrevu} />}
+      {showInattendu && <FormSaisie mode="entrepot" onClose={()=>setShowInattendu(false)} onSubmit={submitEntrepot} />}
 
       {/* MODAL RATTACHEMENT */}
-      {modalRattach && <Modal onClose={() => setModalRattach(null)}>
-        <p style={{ fontSize: 15, fontWeight: 700, marginBottom: 14 }}>🔗 Rattacher à une commande</p>
-        <div style={{ background: "#f5f3ee", borderRadius: 10, padding: "12px 14px", marginBottom: 16, fontSize: 13, color: "#6b7280" }}>
-          <strong>Fiche {modalRattach.numero} :</strong><br />
-          {(modalRattach.products || []).map((p: any, i: number) => <div key={i}>📦 {p.nom}{p.qteRecue ? ` × ${p.qteRecue}` : ""}</div>)}
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
-          <div><label style={lbl}>Client</label><input style={inp} value={rClient} onChange={e => setRClient(e.target.value)} /></div>
-          <div><label style={lbl}>N° BL</label><input style={inp} type="number" value={rBl} onChange={e => setRBl(e.target.value)} /></div>
-          <div><label style={lbl}>Transporteur</label><input style={inp} value={rTransporteur} onChange={e => setRTransporteur(e.target.value)} /></div>
-          <div><label style={lbl}>Date livraison</label><input style={inp} type="date" value={rDateLiv} onChange={e => setRDateLiv(e.target.value)} /></div>
-        </div>
-        <div style={{ marginBottom: 12 }}><label style={lbl}>Saisi par</label><input style={inp} value={rCommercial} onChange={e => setRCommercial(e.target.value)} /></div>
-        <div><label style={lbl}>Commentaires</label><textarea style={{ ...inp, minHeight: 55 }} value={rComment} onChange={e => setRComment(e.target.value)} /></div>
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 16 }}>
-          <button style={{ ...btn("transparent", "#1a2e1a"), border: "1.5px solid #e8e0d0" }} onClick={() => setModalRattach(null)}>Annuler</button>
-          <button style={btn("#c8a84b", "#0a0a0a")} onClick={confirmerRattachement}>🔗 Rattacher</button>
-        </div>
-      </Modal>}
+      {showRattach && (
+        <Overlay onClose={()=>setShowRattach(null)}>
+          {(() => {
+            let rClient="",rBl="",rTra="",rDat="",rCom="",rCmt="";
+            return (
+              <>
+                <p style={{ fontSize:15, fontWeight:700, marginBottom:14 }}>🔗 Rattacher à une commande</p>
+                <div style={{ background:"#f5f3ee", borderRadius:10, padding:"12px 14px", marginBottom:16, fontSize:13, color:"#6b7280" }}>
+                  <strong>Fiche {showRattach.numero} :</strong><br/>
+                  {(showRattach.products||[]).map((p:any,i:number)=><div key={i}>📦 {p.nom}{p.qteRecue?` × ${p.qteRecue}`:""}</div>)}
+                </div>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:12 }}>
+                  <div><label style={L}>Client</label><input style={S} placeholder="Client" onChange={e=>{rClient=e.target.value}} /></div>
+                  <div><label style={L}>N° BL</label><input style={S} type="number" placeholder="BL" onChange={e=>{rBl=e.target.value}} /></div>
+                  <div><label style={L}>Transporteur</label><input style={S} onChange={e=>{rTra=e.target.value}} /></div>
+                  <div><label style={L}>Date livraison</label><input style={S} type="date" onChange={e=>{rDat=e.target.value}} /></div>
+                </div>
+                <div style={{ marginBottom:12 }}><label style={L}>Saisi par</label><input style={S} onChange={e=>{rCom=e.target.value}} /></div>
+                <div><label style={L}>Commentaires</label><textarea style={{...S,minHeight:55}} onChange={e=>{rCmt=e.target.value}} /></div>
+                <div style={{ display:"flex", justifyContent:"flex-end", gap:10, marginTop:16 }}>
+                  <button style={{ padding:"10px 18px", borderRadius:10, border:"1.5px solid #e8e0d0", background:"transparent", cursor:"pointer", fontSize:13, fontFamily:"inherit" }} onClick={()=>setShowRattach(null)}>Annuler</button>
+                  <button style={{ padding:"10px 18px", borderRadius:10, border:"none", background:"#c8a84b", color:"#0a0a0a", cursor:"pointer", fontSize:13, fontWeight:700, fontFamily:"inherit" }}
+                    onClick={()=>submitRattach({ client:rClient, bl:rBl, transporteur:rTra, dateLiv:rDat, commercial:rCom, comment:rCmt })}>
+                    🔗 Rattacher
+                  </button>
+                </div>
+              </>
+            );
+          })()}
+        </Overlay>
+      )}
 
       {/* MODAL SUCCÈS */}
-      {modalSuccess && <Modal onClose={() => { setModalSuccess(null); setRecapMessage(""); }}>
-        <div style={{ textAlign: "center", marginBottom: 20 }}>
-          <div style={{ fontSize: 40, marginBottom: 8 }}>✅</div>
-          <div style={{ fontSize: 11, color: "#9ca3af", textTransform: "uppercase" }}>Numéro de fiche</div>
-          <div style={{ fontSize: 28, fontWeight: 800, color: "#c8a84b" }}>{modalSuccess.fiche.numero}</div>
-        </div>
-        <button style={{ ...btn("#fee2e2", "#dc2626"), width: "100%", justifyContent: "center", marginBottom: 14 }} onClick={() => genererPDFRetour(modalSuccess.fiche)}>📄 Télécharger le PDF</button>
-        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
-          {modalSuccess.source === "commercial" && <button style={{ ...btn("#dbeafe", "#1d4ed8"), justifyContent: "flex-start" }} onClick={() => setRecapMessage(genererMessageRetour(modalSuccess.fiche, "prevu_preparateur"))}>📦 Message au préparateur</button>}
-          {modalSuccess.source === "entrepot" && <button style={{ ...btn("#fef3c7", "#b45309"), justifyContent: "flex-start" }} onClick={() => setRecapMessage(genererMessageRetour(modalSuccess.fiche, "entrepot_nondecl"))}>⚠️ Alerter le commercial</button>}
-          {modalSuccess.source === "valide" && <button style={{ ...btn("#dcfce7", "#15803d"), justifyContent: "flex-start" }} onClick={() => setRecapMessage(genererMessageRetour(modalSuccess.fiche, "bilan_preparateur"))}>✅ Envoyer le bilan</button>}
-        </div>
-        {recapMessage && <><textarea value={recapMessage} onChange={e => setRecapMessage(e.target.value)} style={{ ...inp, minHeight: 120, background: "#f5f3ee", marginBottom: 8 }} />
-          <div style={{ display: "flex", gap: 8 }}>
-            <button style={{ ...btn("#25D366"), flex: 1, justifyContent: "center" }} onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(recapMessage)}`, "_blank")}>📲 WhatsApp</button>
-            <button style={{ ...btn("transparent", "#1a2e1a"), border: "1.5px solid #e8e0d0" }} onClick={() => navigator.clipboard.writeText(recapMessage)}>📋</button>
-          </div></>}
-        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}><button style={{ ...btn("transparent", "#1a2e1a"), border: "1.5px solid #e8e0d0" }} onClick={() => { setModalSuccess(null); setRecapMessage(""); }}>Fermer</button></div>
-      </Modal>}
-
-      {/* MODAL MODIF */}
-      {modalEdit && <Modal onClose={() => setModalEdit(null)}>
-        <p style={{ fontSize: 15, fontWeight: 700, marginBottom: 14 }}>✏️ Modifier <span style={{ color: "#c8a84b" }}>{modalEdit.numero}</span></p>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
-          <div><label style={lbl}>Client</label><input style={inp} value={editClient} onChange={e => setEditClient(e.target.value)} /></div>
-          <div><label style={lbl}>N° BL</label><input style={inp} type="number" value={editBl} onChange={e => setEditBl(e.target.value)} /></div>
-          <div><label style={lbl}>Transporteur</label><input style={inp} value={editTransporteur} onChange={e => setEditTransporteur(e.target.value)} /></div>
-          <div><label style={lbl}>Date livraison</label><input style={inp} type="date" value={editDateLiv} onChange={e => setEditDateLiv(e.target.value)} /></div>
-        </div>
-        <div style={{ marginBottom: 14 }}><label style={lbl}>Saisi par</label><input style={inp} value={editCommercial} onChange={e => setEditCommercial(e.target.value)} /></div>
-        {editProducts.map((p, i) => <ProdRow key={i} p={p} i={i} arr={editProducts} set={setEditProducts} mode="prevu" listId={PRODUITS_DATALIST_ID} />)}
-        <button onClick={() => setEditProducts([...editProducts, { nom: "", lot: "", origine: "", qteAttendue: "", qteRecue: "", motif: "" }])} style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", border: "1.5px dashed #c8a84b", borderRadius: 10, background: "transparent", cursor: "pointer", fontSize: 13, color: "#c8a84b", marginBottom: 14 }}>+ Ajouter</button>
-        <div><label style={lbl}>Commentaires</label><textarea style={{ ...inp, minHeight: 55 }} value={editComment} onChange={e => setEditComment(e.target.value)} /></div>
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 16 }}>
-          <button style={{ ...btn("transparent", "#1a2e1a"), border: "1.5px solid #e8e0d0" }} onClick={() => setModalEdit(null)}>Annuler</button>
-          <button style={btn("#c8a84b", "#0a0a0a")} onClick={sauvegarderModif}>💾 Sauvegarder</button>
-        </div>
-      </Modal>}
+      {showSuccess && (
+        <Overlay onClose={()=>{setShowSuccess(null);setRecapMsg("");}}>
+          <div style={{ textAlign:"center", marginBottom:20 }}>
+            <div style={{ fontSize:40, marginBottom:8 }}>✅</div>
+            <div style={{ fontSize:11, color:"#9ca3af", textTransform:"uppercase" }}>Numéro de fiche</div>
+            <div style={{ fontSize:28, fontWeight:800, color:"#c8a84b" }}>{showSuccess.fiche.numero}</div>
+          </div>
+          <button style={{ ...BTN("#fee2e2","#dc2626"), width:"100%", justifyContent:"center", marginBottom:14 }} onClick={()=>genererPDFRetour(showSuccess.fiche)}>📄 PDF</button>
+          <div style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:12 }}>
+            {showSuccess.source==="commercial" && <button style={{ ...BTN("#dbeafe","#1d4ed8"), justifyContent:"flex-start" }} onClick={()=>setRecapMsg(genererMessageRetour(showSuccess.fiche,"prevu_preparateur"))}>📦 Message préparateur</button>}
+            {showSuccess.source==="entrepot" && <button style={{ ...BTN("#fef3c7","#b45309"), justifyContent:"flex-start" }} onClick={()=>setRecapMsg(genererMessageRetour(showSuccess.fiche,"entrepot_nondecl"))}>⚠️ Alerter commercial</button>}
+            {showSuccess.source==="valide" && <button style={{ ...BTN("#dcfce7","#15803d"), justifyContent:"flex-start" }} onClick={()=>setRecapMsg(genererMessageRetour(showSuccess.fiche,"bilan_preparateur"))}>✅ Envoyer bilan</button>}
+          </div>
+          {recapMsg && <>
+            <textarea value={recapMsg} onChange={e=>setRecapMsg(e.target.value)} style={{ ...S, minHeight:120, marginBottom:8 }} />
+            <div style={{ display:"flex", gap:8 }}>
+              <button style={{ ...BTN("#25D366"), flex:1, justifyContent:"center" }} onClick={()=>window.open(`https://wa.me/?text=${encodeURIComponent(recapMsg)}`,"_blank")}>📲 WhatsApp</button>
+              <button style={{ ...BTN("transparent","#1a2e1a"), border:"1.5px solid #e8e0d0" }} onClick={()=>navigator.clipboard.writeText(recapMsg)}>📋</button>
+            </div>
+          </>}
+          <div style={{ display:"flex", justifyContent:"flex-end", marginTop:16 }}>
+            <button style={{ padding:"10px 18px", borderRadius:10, border:"1.5px solid #e8e0d0", background:"transparent", cursor:"pointer", fontSize:13, fontFamily:"inherit" }} onClick={()=>{setShowSuccess(null);setRecapMsg("");}}>Fermer</button>
+          </div>
+        </Overlay>
+      )}
 
       {/* MODAL SUPPRESSION */}
-      {deleteTarget && <Modal onClose={() => setDeleteTarget(null)}>
-        <p style={{ fontSize: 15, fontWeight: 700, marginBottom: 12, color: "#dc2626" }}>🗑 Supprimer la fiche</p>
-        <p style={{ fontSize: 13, color: "#6b7280", marginBottom: 20 }}>Supprimer <strong>{deleteTarget.numero}</strong> ? Elle sera déplacée dans la corbeille.</p>
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
-          <button style={{ ...btn("transparent", "#1a2e1a"), border: "1.5px solid #e8e0d0" }} onClick={() => setDeleteTarget(null)}>Annuler</button>
-          <button style={btn("#dc2626")} onClick={() => supprimerFiche(deleteTarget.type, deleteTarget.id, deleteTarget.numero)}>🗑 Supprimer</button>
-        </div>
-      </Modal>}
+      {showDelete && (
+        <Overlay onClose={()=>setShowDelete(null)}>
+          <p style={{ fontSize:15, fontWeight:700, marginBottom:12, color:"#dc2626" }}>🗑 Supprimer la fiche</p>
+          <p style={{ fontSize:13, color:"#6b7280", marginBottom:20 }}>Supprimer <strong>{showDelete.numero}</strong> ? Elle sera déplacée dans la corbeille.</p>
+          <div style={{ display:"flex", justifyContent:"flex-end", gap:10 }}>
+            <button style={{ padding:"10px 18px", borderRadius:10, border:"1.5px solid #e8e0d0", background:"transparent", cursor:"pointer", fontSize:13, fontFamily:"inherit" }} onClick={()=>setShowDelete(null)}>Annuler</button>
+            <button style={BTN("#dc2626")} onClick={()=>supprimerFiche(showDelete.type,showDelete.id)}>🗑 Supprimer</button>
+          </div>
+        </Overlay>
+      )}
     </div>
   );
 }
