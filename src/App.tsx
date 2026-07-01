@@ -7111,6 +7111,8 @@ _PDF joint_`;
     return <>{fabScanner}<YukonApp onClose={() => { setShowYukon(false); setShowAccueil(true); }} /></>;
   }
 
+  const [showLeofresh, setShowLeofresh] = useState(false);
+
   if (showAccueil) {
     const getHello = () => {
       const h = new Date().getHours();
@@ -7130,8 +7132,6 @@ _PDF joint_`;
     const cardBorder = darkMode ? "#2d3148" : "#e8e0d0";
     const textMain = darkMode ? "#e8e6f0" : "#1a2e1a";
     const textSub = darkMode ? "#9b97b2" : "#9ca3af";
-
-    const [showLeofresh, setShowLeofresh] = useState(false);
 
     const mooreaBtns = [
       { icon: "📋", label: "Pointer arrivage", sub: "Contrôler et valider les arrivages du jour", color: "#c8a84b", badge: nbAttente || null, action: () => { setShowAccueil(false); setPageMode("arrivages"); setVue("__none__" as any); } },
