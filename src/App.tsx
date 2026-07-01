@@ -3863,6 +3863,9 @@ async function getNextNumeroRetour(): Promise<string> {
   } catch { return "RC-" + Date.now(); }
 }
 
+const RETOURS_INP: React.CSSProperties = { padding: "10px 12px", border: "1.5px solid #e8e0d0", borderRadius: 10, background: "#fff", fontSize: 13, outline: "none", width: "100%", fontFamily: "inherit" };
+const RETOURS_LBL: React.CSSProperties = { fontSize: 11, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase" as const, letterSpacing: ".5px", display: "block", marginBottom: 5 };
+
 function FormSaisie({ mode, onClose: oc, onSubmit: os }: { mode:"prevu"|"entrepot", onClose:()=>void, onSubmit:(d:any)=>void }) {
   const [client, setClient] = useState("");
   const [bl, setBl] = useState("");
@@ -3900,19 +3903,19 @@ function FormSaisie({ mode, onClose: oc, onSubmit: os }: { mode:"prevu"|"entrepo
         {mode==="prevu" ? (
           <>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:12 }}>
-              <div><label style={L}>Client</label><input style={S} value={client} onChange={e=>setClient(e.target.value)} placeholder="ex : Carrefour" /></div>
-              <div><label style={L}>N° BL</label><input style={S} type="number" value={bl} onChange={e=>setBl(e.target.value)} /></div>
-              <div><label style={L}>Transporteur</label><input style={S} value={tra} onChange={e=>setTra(e.target.value)} /></div>
-              <div><label style={L}>Date livraison</label><input style={S} type="date" value={dat} onChange={e=>setDat(e.target.value)} /></div>
+              <div><label style={RETOURS_LBL}>Client</label><input style={RETOURS_INP} value={client} onChange={e=>setClient(e.target.value)} placeholder="ex : Carrefour" /></div>
+              <div><label style={RETOURS_LBL}>N° BL</label><input style={RETOURS_INP} type="number" value={bl} onChange={e=>setBl(e.target.value)} /></div>
+              <div><label style={RETOURS_LBL}>Transporteur</label><input style={RETOURS_INP} value={tra} onChange={e=>setTra(e.target.value)} /></div>
+              <div><label style={RETOURS_LBL}>Date livraison</label><input style={RETOURS_INP} type="date" value={dat} onChange={e=>setDat(e.target.value)} /></div>
             </div>
-            <div style={{ marginBottom:14 }}><label style={L}>Saisi par</label><input style={S} value={com} onChange={e=>setCom(e.target.value)} /></div>
+            <div style={{ marginBottom:14 }}><label style={RETOURS_LBL}>Saisi par</label><input style={RETOURS_INP} value={com} onChange={e=>setCom(e.target.value)} /></div>
           </>
         ) : (
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:12 }}>
-            <div><label style={L}>Reçu par</label><input style={S} value={agent} onChange={e=>setAgent(e.target.value)} /></div>
-            <div><label style={L}>Date réception</label><input style={S} type="date" value={datE} onChange={e=>setDatE(e.target.value)} /></div>
-            <div><label style={L}>Client (optionnel)</label><input style={S} value={cliE} onChange={e=>setCliE(e.target.value)} /></div>
-            <div><label style={L}>Transporteur (optionnel)</label><input style={S} value={traE} onChange={e=>setTraE(e.target.value)} /></div>
+            <div><label style={RETOURS_LBL}>Reçu par</label><input style={RETOURS_INP} value={agent} onChange={e=>setAgent(e.target.value)} /></div>
+            <div><label style={RETOURS_LBL}>Date réception</label><input style={RETOURS_INP} type="date" value={datE} onChange={e=>setDatE(e.target.value)} /></div>
+            <div><label style={RETOURS_LBL}>Client (optionnel)</label><input style={RETOURS_INP} value={cliE} onChange={e=>setCliE(e.target.value)} /></div>
+            <div><label style={RETOURS_LBL}>Transporteur (optionnel)</label><input style={RETOURS_INP} value={traE} onChange={e=>setTraE(e.target.value)} /></div>
           </div>
         )}
 
@@ -3922,18 +3925,18 @@ function FormSaisie({ mode, onClose: oc, onSubmit: os }: { mode:"prevu"|"entrepo
 
         {rows.map((row, i) => (
           <div key={i} style={{ display:"grid", gridTemplateColumns: mode==="prevu" ? "2fr 1fr 1fr 0.8fr 0.8fr 1.8fr 28px" : "2fr 1fr 1fr 0.9fr 1.8fr 70px 28px", gap:5, marginBottom:6, alignItems:"center" }}>
-            <input style={S} list="produits-stock-list" placeholder="Produit" value={row.nom} onChange={e=>upRow(i,"nom",e.target.value)} autoComplete="off" />
-            <input style={S} placeholder="Lot" value={row.lot} onChange={e=>upRow(i,"lot",e.target.value)} />
-            <input style={S} placeholder="Origine" value={row.origine} onChange={e=>upRow(i,"origine",e.target.value)} />
+            <input style={RETOURS_INP} list="produits-stock-list" placeholder="Produit" value={row.nom} onChange={e=>upRow(i,"nom",e.target.value)} autoComplete="off" />
+            <input style={RETOURS_INP} placeholder="Lot" value={row.lot} onChange={e=>upRow(i,"lot",e.target.value)} />
+            <input style={RETOURS_INP} placeholder="Origine" value={row.origine} onChange={e=>upRow(i,"origine",e.target.value)} />
             {mode==="prevu" ? (
               <>
-                <input style={{...S,textAlign:"center"}} type="number" placeholder="Att." value={row.qteAttendue} onChange={e=>upRow(i,"qteAttendue",e.target.value)} />
-                <input style={{...S,textAlign:"center"}} type="number" placeholder="Reçu" value={row.qteRecue} onChange={e=>upRow(i,"qteRecue",e.target.value)} />
+                <input style={{...RETOURS_INP,textAlign:"center"}} type="number" placeholder="Att." value={row.qteAttendue} onChange={e=>upRow(i,"qteAttendue",e.target.value)} />
+                <input style={{...RETOURS_INP,textAlign:"center"}} type="number" placeholder="Reçu" value={row.qteRecue} onChange={e=>upRow(i,"qteRecue",e.target.value)} />
               </>
             ) : (
-              <input style={{...S,textAlign:"center"}} type="number" placeholder="Qté" value={row.qteRecue} onChange={e=>upRow(i,"qteRecue",e.target.value)} />
+              <input style={{...RETOURS_INP,textAlign:"center"}} type="number" placeholder="Qté" value={row.qteRecue} onChange={e=>upRow(i,"qteRecue",e.target.value)} />
             )}
-            <select style={S} value={row.motif} onChange={e=>upRow(i,"motif",e.target.value)}>
+            <select style={RETOURS_INP} value={row.motif} onChange={e=>upRow(i,"motif",e.target.value)}>
               <option value="">--</option>
               {(mode==="prevu"?MOTIFS_RETOUR:ETATS_ENTREPOT).map(m=><option key={m} value={m}>{m}</option>)}
             </select>
@@ -3955,8 +3958,8 @@ function FormSaisie({ mode, onClose: oc, onSubmit: os }: { mode:"prevu"|"entrepo
         </button>
 
         <div style={{ marginBottom:14 }}>
-          <label style={L}>Commentaires</label>
-          <textarea style={{...S,minHeight:55,resize:"vertical"}} value={mode==="prevu"?cmt:cmtE} onChange={e=>mode==="prevu"?setCmt(e.target.value):setCmtE(e.target.value)} />
+          <label style={RETOURS_LBL}>Commentaires</label>
+          <textarea style={{...RETOURS_INP,minHeight:55,resize:"vertical"}} value={mode==="prevu"?cmt:cmtE} onChange={e=>mode==="prevu"?setCmt(e.target.value):setCmtE(e.target.value)} />
         </div>
 
         <div style={{ display:"flex", justifyContent:"flex-end", gap:10 }}>
@@ -3972,8 +3975,6 @@ function FormSaisie({ mode, onClose: oc, onSubmit: os }: { mode:"prevu"|"entrepo
 
 
 function RetoursClientsModule({ onClose }: { onClose: () => void }) {
-  const S: React.CSSProperties = { padding: "10px 12px", border: "1.5px solid #e8e0d0", borderRadius: 10, background: "#fff", fontSize: 13, outline: "none", width: "100%", fontFamily: "inherit" };
-  const L: React.CSSProperties = { fontSize: 11, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".5px", display: "block", marginBottom: 5 };
   const BTN = (bg: string, c = "#fff"): React.CSSProperties => ({ background: bg, color: c, border: "none", borderRadius: 10, padding: "10px 16px", fontWeight: 700, fontSize: 13, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6, fontFamily: "inherit" });
 
   // ── State principal ──
@@ -4160,7 +4161,7 @@ function RetoursClientsModule({ onClose }: { onClose: () => void }) {
               </tbody>
             </table>
             <div style={{ marginTop:10 }}>
-              <label style={L}>Commentaire</label>
+              <label style={RETOURS_LBL}>Commentaire</label>
               <textarea defaultValue={r.commentPrep||""} onChange={e => setCmtLocal(prev=>({...prev,[r.id]:e.target.value}))}
                 style={{ ...S, minHeight:50, resize:"vertical" }} />
             </div>
@@ -4343,13 +4344,13 @@ function RetoursClientsModule({ onClose }: { onClose: () => void }) {
                   {(showRattach.products||[]).map((p:any,i:number)=><div key={i}>📦 {p.nom}{p.qteRecue?` × ${p.qteRecue}`:""}</div>)}
                 </div>
                 <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:12 }}>
-                  <div><label style={L}>Client</label><input style={S} placeholder="Client" onChange={e=>{rClient=e.target.value}} /></div>
-                  <div><label style={L}>N° BL</label><input style={S} type="number" placeholder="BL" onChange={e=>{rBl=e.target.value}} /></div>
-                  <div><label style={L}>Transporteur</label><input style={S} onChange={e=>{rTra=e.target.value}} /></div>
-                  <div><label style={L}>Date livraison</label><input style={S} type="date" onChange={e=>{rDat=e.target.value}} /></div>
+                  <div><label style={RETOURS_LBL}>Client</label><input style={RETOURS_INP} placeholder="Client" onChange={e=>{rClient=e.target.value}} /></div>
+                  <div><label style={RETOURS_LBL}>N° BL</label><input style={RETOURS_INP} type="number" placeholder="BL" onChange={e=>{rBl=e.target.value}} /></div>
+                  <div><label style={RETOURS_LBL}>Transporteur</label><input style={RETOURS_INP} onChange={e=>{rTra=e.target.value}} /></div>
+                  <div><label style={RETOURS_LBL}>Date livraison</label><input style={RETOURS_INP} type="date" onChange={e=>{rDat=e.target.value}} /></div>
                 </div>
-                <div style={{ marginBottom:12 }}><label style={L}>Saisi par</label><input style={S} onChange={e=>{rCom=e.target.value}} /></div>
-                <div><label style={L}>Commentaires</label><textarea style={{...S,minHeight:55}} onChange={e=>{rCmt=e.target.value}} /></div>
+                <div style={{ marginBottom:12 }}><label style={RETOURS_LBL}>Saisi par</label><input style={RETOURS_INP} onChange={e=>{rCom=e.target.value}} /></div>
+                <div><label style={RETOURS_LBL}>Commentaires</label><textarea style={{...RETOURS_INP,minHeight:55}} onChange={e=>{rCmt=e.target.value}} /></div>
                 <div style={{ display:"flex", justifyContent:"flex-end", gap:10, marginTop:16 }}>
                   <button style={{ padding:"10px 18px", borderRadius:10, border:"1.5px solid #e8e0d0", background:"transparent", cursor:"pointer", fontSize:13, fontFamily:"inherit" }} onClick={()=>setShowRattach(null)}>Annuler</button>
                   <button style={{ padding:"10px 18px", borderRadius:10, border:"none", background:"#c8a84b", color:"#0a0a0a", cursor:"pointer", fontSize:13, fontWeight:700, fontFamily:"inherit" }}
