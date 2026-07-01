@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc as fsDoc } from "firebase/firestore";
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc as fsDoc, onSnapshot } from "firebase/firestore";
 import { getFirestore } from "firebase/firestore";
 import { initializeApp as initializeApp2 } from "firebase/app";
 import { getDatabase as getDatabase2, ref as ref2, onValue as onValue2, off as off2 } from "firebase/database";
@@ -3984,10 +3984,23 @@ function RetoursClientsModule({ onClose }: { onClose: () => void }) {
   const [controleLocal, setControleLocal] = useState<Record<string, any>>({});
   const [commentPrepLocal, setCommentPrepLocal] = useState<Record<string, string>>({});
 
-  useEffect(() => { fetchAll(); }, []);
+  useEffect(() => {
+    setLoading(true);
+    const unsub1 = onSnapshot(collection(fsDb, "retours_clients"), snap => {
+      setRetours(snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a: any, b: any) => (b.ts || 0) - (a.ts || 0)));
+      setLoading(false);
+    });
+    const unsub2 = onSnapshot(collection(fsDb, "retours_entrepot"), snap => {
+      setRetoursEntrepot(snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a: any, b: any) => (b.ts || 0) - (a.ts || 0)));
+    });
+    const unsub3 = onSnapshot(collection(fsDb, "retours_corbeille"), snap => {
+      setCorbeille(snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a: any, b: any) => (b._deletedTs || 0) - (a._deletedTs || 0)));
+    });
+    return () => { unsub1(); unsub2(); unsub3(); };
+  }, []);
 
   async function fetchAll() {
-    setLoading(true);
+    // Garde pour les opérations qui ont besoin d'un refresh manuel
     try {
       const [rSnap, eSnap, cSnap] = await Promise.all([
         getDocs(collection(fsDb, "retours_clients")),
@@ -3998,7 +4011,6 @@ function RetoursClientsModule({ onClose }: { onClose: () => void }) {
       setRetoursEntrepot(eSnap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a: any, b: any) => (b.ts || 0) - (a.ts || 0)));
       setCorbeille(cSnap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a: any, b: any) => (b._deletedTs || 0) - (a._deletedTs || 0)));
     } catch (e) { console.error(e); }
-    setLoading(false);
   }
 
   // Historique pour autocomplete
