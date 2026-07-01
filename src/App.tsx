@@ -3869,6 +3869,7 @@ function ModalSaisiePrevu({ onClose, onSubmit }: { onClose: () => void; onSubmit
   const lbl: React.CSSProperties = { fontSize: 11, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".5px", display: "block", marginBottom: 5 };
 
   function handleSubmit() {
+    alert("handleSubmit appelé");
     const client = rClient.current?.value?.trim() || "";
     const bl = rBl.current?.value?.trim() || "";
     if (!client || !bl) { alert("Client et BL requis."); return; }
