@@ -7131,7 +7131,7 @@ _PDF joint_`;
     const textMain = darkMode ? "#e8e6f0" : "#1a2e1a";
     const textSub = darkMode ? "#9b97b2" : "#9ca3af";
 
-    const [showLeofresh, setShowLeofresh] = (React as any).useState(false);
+    const [showLeofresh, setShowLeofresh] = useState(false);
 
     const mooreaBtns = [
       { icon: "📋", label: "Pointer arrivage", sub: "Contrôler et valider les arrivages du jour", color: "#c8a84b", badge: nbAttente || null, action: () => { setShowAccueil(false); setPageMode("arrivages"); setVue("__none__" as any); } },
