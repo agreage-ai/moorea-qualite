@@ -3855,64 +3855,26 @@ const _retoursApp = getApps2().find((a: any) => a.name === "moorea-retours") ?? 
 // On réutilise getDatabase2 déjà importé pour qrTracker — même fonction, app différente
 const dbRetours = getDatabase2(_retoursApp);
 
-// ProdRow en dehors du composant pour éviter le re-mount à chaque frappe
-function ProdRow({ p, i, arr, set, mode, produitsHisto }: any) {
-  const [showAc, setShowAc] = useState(false);
-  const [acResults, setAcResults] = useState<any[]>([]);
-
-  function handleNomChange(val: string) {
-    set(arr.map((x: any, j: number) => j === i ? { ...x, nom: val } : x));
-    if (val.length > 1 && produitsHisto?.length) {
-      const q = val.toLowerCase();
-      const matches = produitsHisto.filter((p: any) => p.nom.toLowerCase().includes(q)).slice(0, 8);
-      setAcResults(matches);
-      setShowAc(matches.length > 0);
-    } else {
-      setShowAc(false);
-    }
-  }
-
-  function selectProduit(prod: any) {
-    set(arr.map((x: any, j: number) => j === i ? { ...x, nom: prod.nom, origine: prod.origine || x.origine } : x));
-    setShowAc(false);
-  }
-
+// ProdRow — PAS de useState interne, utilise datalist HTML natif
+function ProdRow({ p, i, arr, set, mode, listId }: any) {
+  const inp: React.CSSProperties = { padding: "10px 13px", border: "1.5px solid #e8e0d0", borderRadius: 10, background: "#fff", fontSize: 13, outline: "none", width: "100%" };
   return (
     <div style={{ display: "grid", gridTemplateColumns: mode === "prevu" ? "2fr 1fr 1fr 1.4fr 2fr 28px" : "2fr 1fr 1fr 0.8fr 1.4fr 1.6fr 28px", gap: 6, marginBottom: 6, alignItems: "center" }}>
-      <div style={{ position: "relative" }}>
-        <input style={{ padding: "10px 13px", border: "1.5px solid #e8e0d0", borderRadius: 10, background: "#fff", fontSize: 13, outline: "none", width: "100%" }}
-          placeholder={mode === "prevu" ? "Produit" : "Description"} value={p.nom}
-          onChange={e => handleNomChange(e.target.value)}
-          onBlur={() => setTimeout(() => setShowAc(false), 150)}
-          autoComplete="off" />
-        {showAc && (
-          <div style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "#fff", border: "1.5px solid rgba(200,168,75,.4)", borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,.12)", zIndex: 300, maxHeight: 200, overflowY: "auto", marginTop: 3 }}>
-            {acResults.map((r: any, ri: number) => (
-              <div key={ri} onMouseDown={() => selectProduit(r)}
-                style={{ padding: "9px 14px", fontSize: 13, cursor: "pointer", borderBottom: "1px solid #f5f3ee" }}
-                onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "#f5f3ee"}
-                onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "#fff"}>
-                <div style={{ fontWeight: 600, color: "#1a2e1a" }}>{r.nom}</div>
-                {r.origine && <div style={{ fontSize: 11, color: "#9ca3af" }}>📍 {r.origine}</div>}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-      <input style={{ padding: "10px 13px", border: "1.5px solid #e8e0d0", borderRadius: 10, background: "#fff", fontSize: 13, outline: "none", width: "100%" }} placeholder="Lot" type="number" value={p.lot} onChange={e => set(arr.map((x: any, j: number) => j === i ? { ...x, lot: e.target.value } : x))} />
-      <input style={{ padding: "10px 13px", border: "1.5px solid #e8e0d0", borderRadius: 10, background: "#fff", fontSize: 13, outline: "none", width: "100%" }} placeholder="Origine" value={p.origine} onChange={e => set(arr.map((x: any, j: number) => j === i ? { ...x, origine: e.target.value } : x))} />
+      <input style={inp} list={listId} placeholder={mode === "prevu" ? "Produit" : "Description"} value={p.nom} onChange={e => set(arr.map((x: any, j: number) => j === i ? { ...x, nom: e.target.value } : x))} autoComplete="off" />
+      <input style={inp} placeholder="Lot" type="number" value={p.lot} onChange={e => set(arr.map((x: any, j: number) => j === i ? { ...x, lot: e.target.value } : x))} />
+      <input style={inp} placeholder="Origine" value={p.origine} onChange={e => set(arr.map((x: any, j: number) => j === i ? { ...x, origine: e.target.value } : x))} />
       {mode === "prevu" ? (
         <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
-          <input style={{ padding: "8px 4px", border: "1.5px solid #e8e0d0", borderRadius: 10, background: "#fff", fontSize: 13, outline: "none", width: 52, textAlign: "center" }} type="number" placeholder="Att." value={p.qteAttendue} onChange={e => set(arr.map((x: any, j: number) => j === i ? { ...x, qteAttendue: e.target.value } : x))} />
+          <input style={{ ...inp, width: 52, textAlign: "center", padding: "8px 4px" }} type="number" placeholder="Att." value={p.qteAttendue} onChange={e => set(arr.map((x: any, j: number) => j === i ? { ...x, qteAttendue: e.target.value } : x))} />
           <span style={{ color: "#bbb" }}>/</span>
-          <input style={{ padding: "8px 4px", border: "1.5px solid #e8e0d0", borderRadius: 10, background: "#fff", fontSize: 13, outline: "none", width: 52, textAlign: "center" }} type="number" placeholder="Reçu" value={p.qteRecue} onChange={e => set(arr.map((x: any, j: number) => j === i ? { ...x, qteRecue: e.target.value } : x))} />
+          <input style={{ ...inp, width: 52, textAlign: "center", padding: "8px 4px" }} type="number" placeholder="Reçu" value={p.qteRecue} onChange={e => set(arr.map((x: any, j: number) => j === i ? { ...x, qteRecue: e.target.value } : x))} />
         </div>
       ) : (
-        <input style={{ padding: "10px 13px", border: "1.5px solid #e8e0d0", borderRadius: 10, background: "#fff", fontSize: 13, outline: "none", width: "100%", textAlign: "center" }} type="number" placeholder="Qté" value={p.qteRecue} onChange={e => set(arr.map((x: any, j: number) => j === i ? { ...x, qteRecue: e.target.value } : x))} />
+        <input style={{ ...inp, textAlign: "center" }} type="number" placeholder="Qté" value={p.qteRecue} onChange={e => set(arr.map((x: any, j: number) => j === i ? { ...x, qteRecue: e.target.value } : x))} />
       )}
-      <select style={{ padding: "10px 13px", border: "1.5px solid #e8e0d0", borderRadius: 10, background: "#fff", fontSize: 13, outline: "none", width: "100%" }} value={p.motif} onChange={e => set(arr.map((x: any, j: number) => j === i ? { ...x, motif: e.target.value } : x))}>
+      <select style={inp} value={p.motif} onChange={e => set(arr.map((x: any, j: number) => j === i ? { ...x, motif: e.target.value } : x))}>
         <option value="">-- {mode === "prevu" ? "Motif" : "État"} --</option>
-        {(mode === "prevu" ? MOTIFS_RETOUR : ETATS_ENTREPOT).map(m => <option key={m}>{m}</option>)}
+        {(mode === "prevu" ? MOTIFS_RETOUR : ETATS_ENTREPOT).map((m: string) => <option key={m}>{m}</option>)}
       </select>
       {mode === "entrepot" && (
         <div style={{ display: "flex", gap: 3 }}>
@@ -4082,9 +4044,8 @@ function RetoursClientsModule({ onClose }: { onClose: () => void }) {
   const lbl: React.CSSProperties = { fontSize: 11, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".5px", display: "block", marginBottom: 5 };
 
   // Historique produits depuis arrivages
-  const produitsHisto = (() => {
-    return STOCK_ARTICLES_LIST.map(s => ({ nom: s.article, origine: "", equipe: s.equipe }));
-  })();
+  // Autocomplete produits via datalist HTML natif — pas de re-render
+  const PRODUITS_DATALIST_ID = "produits-stock-list";
 
   const Modal = ({ children, onClose: mc }: any) => (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.55)", zIndex: 500, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, overflowY: "auto" }} onClick={mc}>
@@ -4210,6 +4171,10 @@ function RetoursClientsModule({ onClose }: { onClose: () => void }) {
 
   return (
     <div style={{ minHeight: "100vh", background: "#f5f3ee", fontFamily: "'Syne', sans-serif" }}>
+      {/* Datalist pour autocomplete produits */}
+      <datalist id={PRODUITS_DATALIST_ID}>
+        {STOCK_ARTICLES_LIST.map((s, i) => <option key={i} value={s.article} />)}
+      </datalist>
       {topBar}
       <div style={{ maxWidth: 900, margin: "0 auto", padding: "16px 12px 80px" }}>
 
@@ -4292,7 +4257,7 @@ function RetoursClientsModule({ onClose }: { onClose: () => void }) {
         </div>
         <div style={{ marginBottom: 14 }}><label style={lbl}>Saisi par</label><input style={inp} value={fCommercial} onChange={e => setFCommercial(e.target.value)} /></div>
         <p style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase", marginBottom: 8 }}>Produits</p>
-        {fProducts.map((p, i) => <ProdRow key={i} p={p} i={i} arr={fProducts} set={setFProducts} mode="prevu" produitsHisto={produitsHisto} />)}
+        {fProducts.map((p, i) => <ProdRow key={i} p={p} i={i} arr={fProducts} set={setFProducts} mode="prevu" listId={PRODUITS_DATALIST_ID} />)}
         <button onClick={() => setFProducts([...fProducts, { nom: "", lot: "", origine: "", qteAttendue: "", qteRecue: "", motif: "" }])} style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", border: "1.5px dashed #c8a84b", borderRadius: 10, background: "transparent", cursor: "pointer", fontSize: 13, color: "#c8a84b", marginBottom: 14 }}>+ Ajouter</button>
         <div><label style={lbl}>Commentaires</label><textarea style={{ ...inp, minHeight: 55 }} value={fComment} onChange={e => setFComment(e.target.value)} /></div>
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 16 }}>
@@ -4312,7 +4277,7 @@ function RetoursClientsModule({ onClose }: { onClose: () => void }) {
           <div><label style={lbl}>Transporteur (optionnel)</label><input style={inp} value={eTransporteur} onChange={e => setETransporteur(e.target.value)} /></div>
         </div>
         <p style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase", marginBottom: 8 }}>Articles reçus</p>
-        {eProducts.map((p, i) => <ProdRow key={i} p={p} i={i} arr={eProducts} set={setEProducts} mode="entrepot" produitsHisto={produitsHisto} />)}
+        {eProducts.map((p, i) => <ProdRow key={i} p={p} i={i} arr={eProducts} set={setEProducts} mode="entrepot" listId={PRODUITS_DATALIST_ID} />)}
         <button onClick={() => setEProducts([...eProducts, { nom: "", lot: "", origine: "", qteRecue: "", motif: "", decisionArticle: null }])} style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", border: "1.5px dashed #c8a84b", borderRadius: 10, background: "transparent", cursor: "pointer", fontSize: 13, color: "#c8a84b", marginBottom: 14 }}>+ Ajouter</button>
         <div><label style={lbl}>Commentaires</label><textarea style={{ ...inp, minHeight: 55 }} value={eComment} onChange={e => setEComment(e.target.value)} /></div>
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 16 }}>
@@ -4373,7 +4338,7 @@ function RetoursClientsModule({ onClose }: { onClose: () => void }) {
           <div><label style={lbl}>Date livraison</label><input style={inp} type="date" value={editDateLiv} onChange={e => setEditDateLiv(e.target.value)} /></div>
         </div>
         <div style={{ marginBottom: 14 }}><label style={lbl}>Saisi par</label><input style={inp} value={editCommercial} onChange={e => setEditCommercial(e.target.value)} /></div>
-        {editProducts.map((p, i) => <ProdRow key={i} p={p} i={i} arr={editProducts} set={setEditProducts} mode="prevu" produitsHisto={produitsHisto} />)}
+        {editProducts.map((p, i) => <ProdRow key={i} p={p} i={i} arr={editProducts} set={setEditProducts} mode="prevu" listId={PRODUITS_DATALIST_ID} />)}
         <button onClick={() => setEditProducts([...editProducts, { nom: "", lot: "", origine: "", qteAttendue: "", qteRecue: "", motif: "" }])} style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", border: "1.5px dashed #c8a84b", borderRadius: 10, background: "transparent", cursor: "pointer", fontSize: 13, color: "#c8a84b", marginBottom: 14 }}>+ Ajouter</button>
         <div><label style={lbl}>Commentaires</label><textarea style={{ ...inp, minHeight: 55 }} value={editComment} onChange={e => setEditComment(e.target.value)} /></div>
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 16 }}>
