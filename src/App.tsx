@@ -6095,7 +6095,7 @@ _PDF joint_`;
       return "Bonsoir";
     };
     const today = new Date().toLocaleDateString("fr-FR");
-    const nbAttente = arrivages.filter(a => a.statut === "en attente").length;
+    const nbAttente = arrivages.filter(a => a.statut === "en attente" && a.date === today).length;
     const nbTraitesAujourdHui = arrivages.filter(a => a.date === today && a.statut !== "en attente").length;
     const nbLitigesOuverts = arrivages.filter(a => a.litige && a.litige.statut === "ouvert").length;
     const nbRapports = rapports.length;
@@ -6108,7 +6108,7 @@ _PDF joint_`;
 
     // Ligne 1 — prioritaires
     const row1 = [
-      { icon: "📋", label: "Pointer arrivage", color: "#c8a84b", badge: nbAttente || null, stat: nbAttente > 0 ? `${nbAttente} en attente` : "À jour ✓", action: () => { setShowAccueil(false); setPageMode("arrivages"); setVue("__none__" as any); } },
+      { icon: "📋", label: "Pointer arrivage", color: "#c8a84b", badge: nbAttente || null, stat: nbAttente > 0 ? `${nbAttente} en attente auj.` : nbTraitesAujourdHui > 0 ? `${nbTraitesAujourdHui} traités auj.` : "Aucun arrivage auj.", action: () => { setShowAccueil(false); setPageMode("arrivages"); setVue("__none__" as any); } },
       { icon: "📊", label: "Rapports", color: "#16a34a", badge: null, stat: `${nbRapports} total`, action: () => { setShowAccueil(false); setVue("historique"); setPageMode("arrivages"); } },
       { icon: "📦", label: "Stock", color: "#0891b2", badge: null, stat: "GMS & Prestige", action: () => { setShowAccueil(false); setShowStock(true); setStockTeam(null); setStockFilter(""); setStockEcartFilter("tous"); } },
       { icon: "🔍", label: "Chercher lot", color: "#3b82f6", badge: null, stat: "Traçabilité", action: () => { setShowAccueil(false); setShowRecherche(true); setSearchLotQuery(""); } },
