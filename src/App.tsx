@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import RetoursModule from "./RetoursModule";
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc as fsDoc } from "firebase/firestore";
 import { getFirestore } from "firebase/firestore";
 import { initializeApp as initializeApp2, getApps as getApps2 } from "firebase/app";
@@ -4428,6 +4429,7 @@ export default function App() {
   const [showEtiquettes, setShowEtiquettes] = useState(false);
   const [showQrCode, setShowQrCode] = useState(false);
   const [showLeofresh, setShowLeofresh] = useState(false);
+  const [showRetours, setShowRetours] = useState(false);
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem("moorea-dark") === "1");
   const [popupEtiquette, setPopupEtiquette] = useState<any>(null);
   const [showStock, setShowStock] = useState(false);
@@ -6070,6 +6072,11 @@ _PDF joint_`;
   }
 
 
+  if (showRetours) {
+    const stockArticles = STOCK_ARTICLES_LIST.map((s: any) => s.article);
+    return <RetoursModule onClose={() => { setShowRetours(false); setShowAccueil(true); }} stockArticles={stockArticles} />;
+  }
+
   if (showQrCode) {
     return <QrCodeDashboard onClose={() => { setShowQrCode(false); setShowAccueil(true); }} />;
   }
@@ -6117,13 +6124,14 @@ _PDF joint_`;
     // Ligne 2 — secondaires
     const row2 = [
       { icon: "🌿", label: "Besoins Yukon", color: "#16a34a", badge: null, stat: "Légumes Afrique du Sud", action: () => { setShowAccueil(false); setShowYukon(true); } },
-      { icon: "👥", label: "RH · Pointeuse", color: "#0ea5e9", badge: null, stat: "Temps & présences", action: () => { setShowAccueil(false); setShowRH(true); } },
+      { icon: "📦", label: "Retours clients", color: "#dc2626", badge: null, stat: "Gestion des retours", action: () => { setShowAccueil(false); setShowRetours(true); } },
     ];
 
     // Leofresh
     const leofreshBtns = [
       { icon: "🏷️", label: "Étiquettes", color: "#f59e0b", stat: "Export bilingue", action: () => { setShowLeofresh(false); setShowAccueil(false); setShowEtiquettes(true); } },
       { icon: "📊", label: "QR Code", color: "#27ae60", stat: "Scans réseau", action: () => { setShowLeofresh(false); setShowAccueil(false); setShowQrCode(true); } },
+      { icon: "👥", label: "RH · Pointeuse", color: "#0ea5e9", stat: "Temps & présences", action: () => { setShowLeofresh(false); setShowAccueil(false); setShowRH(true); } },
     ];
 
     function CardCarré({ icon, label, color, badge, stat, action }: any) {
@@ -6199,7 +6207,7 @@ _PDF joint_`;
           {showLeofresh && (
             <div style={{ marginBottom: 16, background: darkMode ? "#1a1808" : "#fffbeb", borderRadius: 14, border: "1.5px solid #f59e0b55", padding: "14px" }}>
               <p style={{ margin: "0 0 12px", fontSize: 11, fontWeight: 700, color: "#f59e0b", textTransform: "uppercase", letterSpacing: ".6px" }}>🍋 Leofresh</p>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 10 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
                 {leofreshBtns.map(b => (
                   <button key={b.label} onClick={b.action}
                     style={{ background: darkMode ? "#22200a" : "#fff", border: `1.5px solid ${b.color}33`, borderRadius: 14, padding: "16px 8px 14px", cursor: "pointer", textAlign: "center", fontFamily: "'Syne', sans-serif", display: "flex", flexDirection: "column", alignItems: "center", gap: 7 }}>
